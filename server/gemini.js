@@ -114,8 +114,8 @@ Questions: ask only about missing quantifiable data or key projects. Max 3 quest
 }
 
 // ── CALL 2: Analyze ────────────────────────────────────────────────────────
-// Decodes JD, loads company context, builds gap map
-async function callAnalyze(profile, companyProfile, jd, mode) {
+// Decodes JD, loads company context, builds gap map, matches live GitHub repos
+async function callAnalyze(profile, companyProfile, jd, mode, liveGithubRepos = []) {
   const model = getModel();
   const prompt = `
 You are an ATS optimization expert and technical recruiter for ${companyProfile.name}.
@@ -124,6 +124,9 @@ CANDIDATE PROFILE:
 Skills: ${JSON.stringify(profile.skills || [])}
 Experience: ${JSON.stringify(profile.experience?.map(e => ({ title: e.title, company: e.company })) || [])}
 Projects: ${JSON.stringify(profile.projects?.map(p => ({ name: p.name, tech: p.tech })) || [])}
+
+REAL LIVE GITHUB REPOSITORIES (fetched live via GitHub REST API — exclude forks):
+${JSON.stringify(liveGithubRepos, null, 2)}
 
 COMPANY PROFILE:
 - Company: ${companyProfile.name}
@@ -150,13 +153,25 @@ Return ONLY valid JSON:
     }
   ],
   "company_tone_tips": ["string — 3 tone/style tips specific to this company"],
-  "jd_extracted_stack": ["string — tech extracted from JD if provided"]
+  "jd_extracted_stack": ["string — tech extracted from JD if provided"],
+  "matched_projects": [
+    {
+      "name": "string — exact live repo name",
+      "description": "string",
+      "language": "string",
+      "topics": ["string"],
+      "html_url": "string"
+    }
+  ]
 }
 
 Gap map rules:
 - "strong": candidate clearly demonstrates this skill
 - "weak": candidate mentions it but lacks depth/examples
 - "missing": company requires it but candidate shows no evidence
+
+Matched projects rule:
+Select which of the candidate's actual live GitHub repositories (if any) match ${companyProfile.name}'s stack (${JSON.stringify(companyProfile.stack)}). Do NOT invent or hallucinate project names. Return only real repos from the input array.
 
 Include all company stack items + JD-extracted skills in gap_map. Max 15 items.
 `;
@@ -654,7 +669,7 @@ function mockUnderstand(rawText, targetCompany, mode) {
   }
 }
 
-function mockAnalyze(profile, companyProfile, mode) {
+function mockAnalyze(profile, companyProfile, mode, liveGithubRepos = []) {
   const isAmazon = companyProfile.name.toLowerCase().includes("amazon");
   
   const keywords = isAmazon
@@ -662,7 +677,6 @@ function mockAnalyze(profile, companyProfile, mode) {
     : ["product", "built from scratch", "ownership", "JavaScript", "React", "Node.js", "MySQL", "Python", "Java", "REST APIs", "full-stack", "performance", "user experience", "shipped", "optimized"];
 
   const profileSkills = (profile.skills || []).map(s => s.toLowerCase());
-  
   const allTargetSkills = companyProfile.stack || [];
   
   const gapMap = allTargetSkills.slice(0, 12).map(skill => {
@@ -676,11 +690,23 @@ function mockAnalyze(profile, companyProfile, mode) {
     }
   });
 
+  const companyStack = companyProfile.stack.map(s => s.toLowerCase());
+  let matchedRepos = [];
+  if (Array.isArray(liveGithubRepos) && liveGithubRepos.length > 0) {
+    matchedRepos = liveGithubRepos.filter(repo => {
+      const lang = (repo.language || "").toLowerCase();
+      const topics = (repo.topics || []).map(t => t.toLowerCase());
+      const desc = (repo.description || "").toLowerCase();
+      return companyStack.some(cs => lang.includes(cs) || cs.includes(lang) || topics.some(t => t.includes(cs)) || desc.includes(cs));
+    });
+  }
+
   return {
     keywords,
     gap_map: gapMap,
     company_tone_tips: companyProfile.coreValues?.slice(0, 3).map(v => `Align bullet points with "${v}" principle`) || [],
-    jd_extracted_stack: []
+    jd_extracted_stack: [],
+    matched_projects: matchedRepos
   };
 }
 

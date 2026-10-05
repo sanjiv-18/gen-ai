@@ -67,6 +67,53 @@ async function extractTextFromFile(file) {
   throw new Error("Unsupported file type");
 }
 
+// ── Helper: Live GitHub Data Fetcher (Pre-AI Step) ────────────────────────
+async function fetchGitHubRepos(githubUrlOrUsername) {
+  if (!githubUrlOrUsername || typeof githubUrlOrUsername !== "string") return [];
+
+  let username = githubUrlOrUsername.trim();
+  username = username.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
+  username = username.replace(/\/.*$/, "").replace(/@/g, "").trim();
+
+  if (!username) return [];
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=30`,
+      {
+        headers: {
+          "User-Agent": "CareerLens-AI-Resume-Builder",
+          "Accept": "application/vnd.github.v3+json"
+        }
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`GitHub API returned status ${response.status} for user ${username}`);
+      return [];
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) return [];
+
+    // Filter to exclude forks and map to clean array of objects
+    const realRepos = data
+      .filter(repo => repo.fork === false)
+      .map(repo => ({
+        name: repo.name,
+        description: repo.description || "",
+        language: repo.language || "",
+        topics: repo.topics || [],
+        html_url: repo.html_url
+      }));
+
+    return realRepos;
+  } catch (err) {
+    console.warn("Error fetching live GitHub repos:", err.message);
+    return [];
+  }
+}
+
 // ── Health Check ───────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", version: "1.0.0", time: new Date().toISOString() });
@@ -126,7 +173,7 @@ app.post("/api/understand", upload.single("resume"), async (req, res) => {
 // Body: { profile, targetCompany, targetRole, jd, mode, apiKey? }
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { profile, targetCompany = "other", jd = "", mode = "fresher", apiKey = "", companyType = "" } = req.body;
+    const { profile, targetCompany = "other", jd = "", mode = "fresher", apiKey = "" } = req.body;
 
     if (!profile) {
       return res.status(400).json({ error: "Profile is required" });
@@ -134,29 +181,43 @@ app.post("/api/analyze", async (req, res) => {
 
     const companyProfile = getCompanyProfile(targetCompany);
     
+    // 4. Live GitHub Data Fetcher (Pre-AI Step)
+    const githubInput = profile.github || req.body.github || "";
+    const liveGithubRepos = await fetchGitHubRepos(githubInput);
+
     // Initialize Gemini if key provided or set in env
     const effectiveKey = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY || "";
     let result;
     if (effectiveKey) {
       initGemini(effectiveKey);
       try {
-        result = await callAnalyze(profile, companyProfile, jd, mode);
+        result = await callAnalyze(profile, companyProfile, jd, mode, liveGithubRepos);
       } catch (geminiErr) {
         console.warn("Gemini analyze failed, using mock:", geminiErr.message);
-        result = mockAnalyze(profile, companyProfile, mode);
+        result = mockAnalyze(profile, companyProfile, mode, liveGithubRepos);
       }
     } else {
-      result = mockAnalyze(profile, companyProfile, mode);
+      result = mockAnalyze(profile, companyProfile, mode, liveGithubRepos);
     }
 
-    // Filter GitHub projects matching company stack
-    const companyStack = companyProfile.stack.map(s => s.toLowerCase());
-    const matchedProjects = (profile.projects || []).filter(proj => {
-      const tech = (proj.tech || []).map(t => t.toLowerCase());
-      return tech.some(t => companyStack.some(cs => cs.includes(t) || t.includes(cs)));
-    });
+    result.live_github_repos = liveGithubRepos;
+    if (!result.matched_projects || result.matched_projects.length === 0) {
+      const companyStack = companyProfile.stack.map(s => s.toLowerCase());
+      if (liveGithubRepos.length > 0) {
+        result.matched_projects = liveGithubRepos.filter(repo => {
+          const lang = (repo.language || "").toLowerCase();
+          const topics = (repo.topics || []).map(t => t.toLowerCase());
+          const desc = (repo.description || "").toLowerCase();
+          return companyStack.some(cs => lang.includes(cs) || cs.includes(lang) || topics.some(t => t.includes(cs)) || desc.includes(cs));
+        });
+      } else {
+        result.matched_projects = (profile.projects || []).filter(proj => {
+          const tech = (proj.tech || []).map(t => t.toLowerCase());
+          return tech.some(t => companyStack.some(cs => cs.includes(t) || t.includes(cs)));
+        });
+      }
+    }
 
-    result.matched_projects = matchedProjects;
     result.company_profile = {
       name: companyProfile.name,
       type: companyProfile.type,
