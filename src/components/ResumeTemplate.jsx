@@ -306,16 +306,53 @@ export default function ResumeTemplate({
         Result: 0 occurrences of "Confirm", "Verified" badges, or any review UI
                 in the downloaded PDF.
       */}
+      {/*
+        ── Print / Export CSS ────────────────────────────────────────────────
+        Double layer of protection:
+          1. printMode=true → CleanBullet renders with zero verification DOM.
+          2. @media print   → .no-print, badges, buttons, spinners are hidden.
+        Result: 0 occurrences of "Confirm", "Verified" badges, or any review UI
+                in the downloaded PDF.
+      */}
       <style>{`
+        @page {
+          margin: 12mm 15mm;
+          size: A4 portrait;
+        }
         @media print {
-          body * { visibility: hidden; }
-          #resume-print, #resume-print * { visibility: visible; }
-          #resume-print { position: absolute; left: 0; top: 0; width: 100%; }
+          html, body {
+            background: white !important;
+            color: #1e293b !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #resume-print, #resume-print * {
+            visibility: visible;
+          }
+          #resume-print {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: white !important;
+          }
           .no-print,
           .truth-badge,
           .resume-verify-badge,
           .spinner,
-          button { display: none !important; }
+          button {
+            display: none !important;
+          }
         }
       `}</style>
 

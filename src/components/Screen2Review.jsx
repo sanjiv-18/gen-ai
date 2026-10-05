@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Star, ChevronRight, ChevronLeft, Building2, ToggleLeft, ToggleRight,
   AlertTriangle, CheckCircle2, XCircle, HelpCircle, Code2,
-  Lightbulb, Filter, Sparkles, BookOpen, Award, Users
+  Lightbulb, Filter, Sparkles, BookOpen, Award, Users, Trash2, Plus
 } from 'lucide-react';
 import { apiAnalyze } from '../services/api';
 import { COMPANY_COLORS } from './SampleResumes';
@@ -71,6 +71,85 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
   const allExpBullets = (profile.experience || []).flatMap(e => e.bullets || []);
   const weakVerbsFound = allExpBullets.flatMap(b => detectWeakVerbs(b));
   const uniqueWeak = [...new Set(weakVerbsFound)];
+
+  // CRUD helpers
+  function addExperience() {
+    setProfile(p => ({
+      ...p,
+      experience: [...(p.experience || []), { title: '', company: '', duration: '', bullets: [''] }]
+    }));
+  }
+
+  function deleteExperience(idx) {
+    setProfile(p => ({
+      ...p,
+      experience: (p.experience || []).filter((_, i) => i !== idx)
+    }));
+  }
+
+  function addExperienceBullet(expIdx) {
+    const updated = [...(profile.experience || [])];
+    updated[expIdx] = {
+      ...updated[expIdx],
+      bullets: [...(updated[expIdx].bullets || []), '']
+    };
+    setProfile(p => ({ ...p, experience: updated }));
+  }
+
+  function deleteExperienceBullet(expIdx, bulletIdx) {
+    const updated = [...(profile.experience || [])];
+    updated[expIdx] = {
+      ...updated[expIdx],
+      bullets: (updated[expIdx].bullets || []).filter((_, bi) => bi !== bulletIdx)
+    };
+    setProfile(p => ({ ...p, experience: updated }));
+  }
+
+  function addEducation() {
+    setProfile(p => ({
+      ...p,
+      education: [...(p.education || []), { degree: '', institution: '', year: '', gpa: '' }]
+    }));
+  }
+
+  function deleteEducation(idx) {
+    setProfile(p => ({
+      ...p,
+      education: (p.education || []).filter((_, i) => i !== idx)
+    }));
+  }
+
+  function addProject() {
+    setProfile(p => ({
+      ...p,
+      projects: [...(p.projects || []), { name: '', tech: [], link: '', bullets: [''] }]
+    }));
+  }
+
+  function deleteProject(idx) {
+    setProfile(p => ({
+      ...p,
+      projects: (p.projects || []).filter((_, i) => i !== idx)
+    }));
+  }
+
+  function addProjectBullet(projIdx) {
+    const updated = [...(profile.projects || [])];
+    updated[projIdx] = {
+      ...updated[projIdx],
+      bullets: [...(updated[projIdx].bullets || []), '']
+    };
+    setProfile(p => ({ ...p, projects: updated }));
+  }
+
+  function deleteProjectBullet(projIdx, bulletIdx) {
+    const updated = [...(profile.projects || [])];
+    updated[projIdx] = {
+      ...updated[projIdx],
+      bullets: (updated[projIdx].bullets || []).filter((_, bi) => bi !== bulletIdx)
+    };
+    setProfile(p => ({ ...p, projects: updated }));
+  }
 
   async function handleBuild() {
     setLoading(true);
@@ -159,19 +238,62 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                 <input className="input" value={profile.github || ''} onChange={e => setProfile(p => ({ ...p, github: e.target.value }))} />
               </div>
             </div>
+            <div className="form-group">
+              <label>Professional Summary</label>
+              <textarea
+                className="textarea"
+                rows={2}
+                placeholder="Brief summary of your expertise and achievements..."
+                value={profile.summary || ''}
+                onChange={e => setProfile(p => ({ ...p, summary: e.target.value }))}
+                style={{ minHeight: 60 }}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Skills (comma separated)</label>
+              <input
+                className="input"
+                placeholder="Python, React, Node.js, SQL, AWS..."
+                value={Array.isArray(profile.skills) ? profile.skills.join(', ') : (profile.skills || '')}
+                onChange={e => setProfile(p => ({
+                  ...p,
+                  skills: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                }))}
+              />
+            </div>
           </div>
 
           {/* Experience */}
-          {(profile.experience || []).length > 0 && (
-            <div className="card anim-fade" style={{ marginBottom: 20 }}>
-              <h3 style={{ marginBottom: 16 }}>Work Experience</h3>
-              {(profile.experience || []).map((exp, i) => (
+          <div className="card anim-fade" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Work Experience</h3>
+              <button className="btn btn-secondary btn-sm" onClick={addExperience} type="button">
+                <Plus size={14} /> Add Experience
+              </button>
+            </div>
+            {(profile.experience || []).length === 0 ? (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+                No work experience added yet. Click "+ Add Experience" to add your roles.
+              </p>
+            ) : (
+              (profile.experience || []).map((exp, i) => (
                 <div key={i} style={{
                   padding: '14px', borderRadius: 'var(--radius-md)',
                   background: 'rgba(255,255,255,0.03)',
                   border: '1px solid var(--border)',
-                  marginBottom: 12
+                  marginBottom: 12, position: 'relative'
                 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => deleteExperience(i)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', color: '#fda4af', borderColor: 'rgba(244,63,94,0.3)' }}
+                      title="Delete this role"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Title / Role</label>
@@ -195,17 +317,28 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                   <div className="form-group">
                     <label>Duration</label>
                     <input className="input" value={exp.duration || ''}
+                      placeholder="e.g. June 2022 – Present (2 years)"
                       onChange={e => {
                         const updated = [...(profile.experience || [])];
                         updated[i] = { ...updated[i], duration: e.target.value };
                         setProfile(p => ({ ...p, experience: updated }));
                       }} />
                   </div>
-                  {(exp.bullets || []).length > 0 && (
-                    <div>
-                      <label>Bullets</label>
-                      {(exp.bullets || []).map((b, bi) => (
-                        <div key={bi} style={{ position: 'relative', marginBottom: 6 }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label style={{ margin: 0 }}>Bullets</label>
+                      <button
+                        type="button"
+                        onClick={() => addExperienceBullet(i)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                      >
+                        <Plus size={12} /> Add Bullet
+                      </button>
+                    </div>
+                    {(exp.bullets || []).map((b, bi) => (
+                      <div key={bi} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
                           <input className="input" value={b}
                             onChange={e => {
                               const updated = [...(profile.experience || [])];
@@ -215,7 +348,7 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                               setProfile(p => ({ ...p, experience: updated }));
                             }}
                             style={{
-                              paddingLeft: 20,
+                              paddingLeft: 12,
                               borderColor: uniqueWeak.some(w => b.toLowerCase().includes(w)) ? 'rgba(245,158,11,0.4)' : undefined
                             }}
                           />
@@ -226,30 +359,60 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                             }}>⚠️ weak verb</span>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <button
+                          type="button"
+                          onClick={() => deleteExperienceBullet(i, bi)}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                          title="Delete bullet"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
 
           {/* Education */}
-          {(profile.education || []).length > 0 && (
-            <div className="card anim-fade" style={{ marginBottom: 20 }}>
-              <h3 style={{ marginBottom: 16 }}>
+          <div className="card anim-fade" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>
                 {isFresher && <span className="badge badge-amber" style={{ marginRight: 8, fontSize: '0.65rem' }}>⭐ Key Section</span>}
                 Education
               </h3>
-              {(profile.education || []).map((edu, i) => (
+              <button className="btn btn-secondary btn-sm" onClick={addEducation} type="button">
+                <Plus size={14} /> Add Education
+              </button>
+            </div>
+            {(profile.education || []).length === 0 ? (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+                No education added yet. Click "+ Add Education" to add your degree.
+              </p>
+            ) : (
+              (profile.education || []).map((edu, i) => (
                 <div key={i} style={{
                   padding: '14px', borderRadius: 'var(--radius-md)',
-                  background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', marginBottom: 12
+                  background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', marginBottom: 12,
+                  position: 'relative'
                 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => deleteEducation(i)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '2px 8px', color: '#fda4af', borderColor: 'rgba(244,63,94,0.3)' }}
+                      title="Delete education"
+                    >
+                      <Trash2 size={13} /> Remove
+                    </button>
+                  </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Degree</label>
                       <input className="input" value={edu.degree || ''}
+                        placeholder="e.g. B.Tech Computer Science"
                         onChange={e => {
                           const updated = [...(profile.education || [])];
                           updated[i] = { ...updated[i], degree: e.target.value };
@@ -259,6 +422,7 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                     <div className="form-group">
                       <label>Institution</label>
                       <input className="input" value={edu.institution || edu.school || ''}
+                        placeholder="e.g. National Institute of Technology"
                         onChange={e => {
                           const updated = [...(profile.education || [])];
                           updated[i] = { ...updated[i], institution: e.target.value };
@@ -270,6 +434,7 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                     <div className="form-group">
                       <label>Year</label>
                       <input className="input" value={edu.year || ''}
+                        placeholder="e.g. 2020 – 2024"
                         onChange={e => {
                           const updated = [...(profile.education || [])];
                           updated[i] = { ...updated[i], year: e.target.value };
@@ -279,6 +444,7 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                     <div className="form-group">
                       <label>GPA / CGPA</label>
                       <input className="input" value={edu.gpa || edu.cgpa || ''}
+                        placeholder="e.g. 8.5/10"
                         onChange={e => {
                           const updated = [...(profile.education || [])];
                           updated[i] = { ...updated[i], gpa: e.target.value };
@@ -287,18 +453,27 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
 
           {/* Projects */}
-          {(profile.projects || []).length > 0 && (
-            <div className="card anim-fade" style={{ marginBottom: 20 }}>
-              <h3 style={{ marginBottom: 16 }}>
+          <div className="card anim-fade" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>
                 {isFresher && <span className="badge badge-amber" style={{ marginRight: 8, fontSize: '0.65rem' }}>⭐ Crucial</span>}
                 Projects
               </h3>
-              {(profile.projects || []).map((proj, i) => {
+              <button className="btn btn-secondary btn-sm" onClick={addProject} type="button">
+                <Plus size={14} /> Add Project
+              </button>
+            </div>
+            {(profile.projects || []).length === 0 ? (
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>
+                No projects listed. Click "+ Add Project" to showcase your work.
+              </p>
+            ) : (
+              (profile.projects || []).map((proj, i) => {
                 const matchesCompany = analysisData?.company_profile?.stack
                   ? (proj.tech || []).some(t => analysisData.company_profile.stack.map(s => s.toLowerCase()).some(s => s.includes(t.toLowerCase()) || t.toLowerCase().includes(s)))
                   : false;
@@ -306,47 +481,95 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                   <div key={i} style={{
                     padding: '14px', borderRadius: 'var(--radius-md)',
                     background: 'rgba(255,255,255,0.03)', border: `1px solid ${matchesCompany ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`,
-                    marginBottom: 12
+                    marginBottom: 12, position: 'relative'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
                         <label>Project Name</label>
                         <input className="input" value={proj.name || proj.title || ''}
+                          placeholder="e.g. E-Commerce Platform"
                           onChange={e => {
                             const updated = [...(profile.projects || [])];
                             updated[i] = { ...updated[i], name: e.target.value };
                             setProfile(p => ({ ...p, projects: updated }));
                           }} />
                       </div>
-                      {matchesCompany && (
-                        <span className="badge badge-green" style={{ marginTop: 20, flexShrink: 0 }}>
-                          <Filter size={10} /> Stack Match
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 12, marginTop: 18 }}>
+                        {matchesCompany && (
+                          <span className="badge badge-green" style={{ flexShrink: 0 }}>
+                            <Filter size={10} /> Stack Match
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => deleteProject(i)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '4px 8px', color: '#fda4af', borderColor: 'rgba(244,63,94,0.3)' }}
+                          title="Delete project"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                     <div className="form-group">
-                      <label>Tech Stack</label>
+                      <label>Tech Stack (comma separated)</label>
                       <input className="input" value={(proj.tech || []).join(', ')}
+                        placeholder="React, Node.js, PostgreSQL, Docker..."
                         onChange={e => {
                           const updated = [...(profile.projects || [])];
-                          updated[i] = { ...updated[i], tech: e.target.value.split(',').map(t => t.trim()) };
+                          updated[i] = { ...updated[i], tech: e.target.value.split(',').map(t => t.trim()).filter(Boolean) };
                           setProfile(p => ({ ...p, projects: updated }));
                         }} />
                     </div>
-                    <div className="form-group">
-                      <label>GitHub Link</label>
+                    <div className="form-group" style={{ marginBottom: 10 }}>
+                      <label>GitHub / Demo Link</label>
                       <input className="input" value={proj.link || ''}
+                        placeholder="https://github.com/username/project"
                         onChange={e => {
                           const updated = [...(profile.projects || [])];
                           updated[i] = { ...updated[i], link: e.target.value };
                           setProfile(p => ({ ...p, projects: updated }));
                         }} />
                     </div>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ margin: 0, fontSize: '0.78rem' }}>Bullets / Key Highlights</label>
+                        <button
+                          type="button"
+                          onClick={() => addProjectBullet(i)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: '2px 8px', fontSize: '0.72rem' }}
+                        >
+                          <Plus size={12} /> Add Bullet
+                        </button>
+                      </div>
+                      {(proj.bullets || []).map((b, bi) => (
+                        <div key={bi} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                          <input className="input" value={b}
+                            placeholder="Describe impact, metric, or technical challenge solved..."
+                            onChange={e => {
+                              const updated = [...(profile.projects || [])];
+                              const bullets = [...(updated[i].bullets || [])];
+                              bullets[bi] = e.target.value;
+                              updated[i] = { ...updated[i], bullets };
+                              setProfile(p => ({ ...p, projects: updated }));
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => deleteProjectBullet(i, bi)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
 
           {/* Fresher Activity Chips */}
           {isFresher && (
@@ -388,19 +611,34 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
           {/* Smart Questions */}
           {questions.length > 0 && (
             <div className="card anim-fade" style={{ marginBottom: 20 }}>
-              <h3 style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <HelpCircle size={16} color="#a5b4fc" />
-                Smart Questions
-                <span className="badge badge-muted" style={{ marginLeft: 4 }}>Skippable</span>
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                  <HelpCircle size={16} color="#a5b4fc" />
+                  Smart Questions
+                  <span className="badge badge-muted" style={{ marginLeft: 4 }}>Skippable</span>
+                </h3>
+              </div>
               <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
                 Your answers will be used to add measurable impact to your resume. All are optional.
               </p>
               {questions.slice(0, 3).map((q, i) => (
                 <div key={i} className="form-group">
-                  <label style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, fontSize: '0.87rem', color: 'var(--text-primary)' }}>
-                    {i + 1}. {q}
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 600, fontSize: '0.87rem', color: 'var(--text-primary)', margin: 0 }}>
+                      {i + 1}. {q}
+                    </label>
+                    {smartAnswers[i] ? (
+                      <button
+                        type="button"
+                        onClick={() => setSmartAnswers(prev => ({ ...prev, [i]: '' }))}
+                        style={{ background: 'none', border: 'none', color: '#fda4af', fontSize: '0.72rem', cursor: 'pointer' }}
+                      >
+                        Clear / Skip
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Optional</span>
+                    )}
+                  </div>
                   <input
                     className="input"
                     placeholder="Your answer (optional)..."
@@ -491,9 +729,47 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                   <div style={{ fontSize: '0.72rem', color: '#fcd34d', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     ⚠ Needs Work
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {analysisData.gap_map.filter(g => g.status === 'weak').map(g => (
-                      <span key={g.skill} className="badge badge-amber" style={{ fontSize: '0.72rem' }}>{g.skill}</span>
+                      <div key={g.skill} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '6px 10px', borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.18)'
+                      }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>{g.skill}</span>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            onClick={() => setGapAnswers(prev => ({
+                              ...prev,
+                              [g.skill]: prev[g.skill] === true ? undefined : true
+                            }))}
+                            style={{
+                              padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                              fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
+                              border: `1px solid ${gapAnswers[g.skill] === true ? 'rgba(16,185,129,0.6)' : 'var(--border)'}`,
+                              background: gapAnswers[g.skill] === true ? 'rgba(16,185,129,0.18)' : 'transparent',
+                              color: gapAnswers[g.skill] === true ? '#6ee7b7' : 'var(--text-muted)',
+                              fontFamily: 'inherit'
+                            }}
+                          >Yes</button>
+                          <button
+                            type="button"
+                            onClick={() => setGapAnswers(prev => ({
+                              ...prev,
+                              [g.skill]: prev[g.skill] === false ? undefined : false
+                            }))}
+                            style={{
+                              padding: '2px 8px', borderRadius: 'var(--radius-full)',
+                              fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer',
+                              border: `1px solid ${gapAnswers[g.skill] === false ? 'rgba(244,63,94,0.6)' : 'var(--border)'}`,
+                              background: gapAnswers[g.skill] === false ? 'rgba(244,63,94,0.15)' : 'transparent',
+                              color: gapAnswers[g.skill] === false ? '#fda4af' : 'var(--text-muted)',
+                              fontFamily: 'inherit'
+                            }}
+                          >No</button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -517,7 +793,11 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                           <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{g.skill}</span>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button
-                              onClick={() => setGapAnswers(prev => ({ ...prev, [g.skill]: true }))}
+                              type="button"
+                              onClick={() => setGapAnswers(prev => ({
+                                ...prev,
+                                [g.skill]: prev[g.skill] === true ? undefined : true
+                              }))}
                               style={{
                                 padding: '2px 10px', borderRadius: 'var(--radius-full)',
                                 fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
@@ -528,7 +808,11 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                               }}
                             >Yes</button>
                             <button
-                              onClick={() => setGapAnswers(prev => ({ ...prev, [g.skill]: false }))}
+                              type="button"
+                              onClick={() => setGapAnswers(prev => ({
+                                ...prev,
+                                [g.skill]: prev[g.skill] === false ? undefined : false
+                              }))}
                               style={{
                                 padding: '2px 10px', borderRadius: 'var(--radius-full)',
                                 fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',

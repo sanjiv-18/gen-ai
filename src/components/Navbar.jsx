@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Zap, Key, X, Eye, EyeOff } from 'lucide-react';
 
-export default function Navbar({ step, apiKey, onApiKeyChange }) {
+export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepClick }) {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [tempKey, setTempKey]   = useState(apiKey || '');
   const [showKey, setShowKey]   = useState(false);
@@ -15,6 +15,11 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
   function saveKey() {
     onApiKeyChange(tempKey.trim());
     setShowKeyModal(false);
+  }
+
+  function handleLogoClick() {
+    if (onReset) onReset();
+    else window.location.href = '/';
   }
 
   return (
@@ -33,7 +38,11 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
         boxShadow: '0 1px 0 rgba(99,102,241,0.08), 0 4px 24px rgba(0,0,0,0.4)',
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          onClick={handleLogoClick}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+          title="Return to Home / Start Over"
+        >
           <div style={{
             width: 36, height: 36, borderRadius: 10,
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -54,19 +63,26 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
           {steps.map((s, i) => (
             <div key={s.num} style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '0.78rem', fontWeight: 700,
-                background: step === s.num
-                  ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
-                  : step > s.num ? '#34d399' : 'rgba(255,255,255,0.06)',
-                border: step === s.num ? 'none' : step > s.num ? 'none' : '1px solid rgba(37,42,74,0.9)',
-                boxShadow: step === s.num ? '0 0 18px rgba(99,102,241,0.55)' : 'none',
-                color: step >= s.num ? 'white' : '#8D96B3',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-              }}>
+              <div
+                onClick={() => {
+                  if (step > s.num && onStepClick) onStepClick(s.num);
+                }}
+                style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.78rem', fontWeight: 700,
+                  cursor: step > s.num ? 'pointer' : 'default',
+                  background: step === s.num
+                    ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
+                    : step > s.num ? '#34d399' : 'rgba(255,255,255,0.06)',
+                  border: step === s.num ? 'none' : step > s.num ? 'none' : '1px solid rgba(37,42,74,0.9)',
+                  boxShadow: step === s.num ? '0 0 18px rgba(99,102,241,0.55)' : 'none',
+                  color: step >= s.num ? 'white' : '#8D96B3',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                }}
+                title={step > s.num ? `Back to ${s.label}` : s.label}
+              >
                 {step > s.num ? '✓' : s.num}
                 {step === s.num && (
                   <div style={{
@@ -76,6 +92,7 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
                   }}>{s.label}</div>
                 )}
               </div>
+
               {i < steps.length - 1 && (
                 <div style={{
                   width: 48, height: 2,

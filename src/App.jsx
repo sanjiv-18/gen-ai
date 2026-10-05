@@ -104,7 +104,17 @@ export default function App() {
     <ErrorBoundary>
       <div style={{ minHeight: '100vh', background: 'var(--bg-base)', position: 'relative' }}>
         <BGGrid />
-        <Navbar step={step} apiKey={apiKey} onApiKeyChange={handleApiKeyChange} />
+        <Navbar
+          step={step}
+          apiKey={apiKey}
+          onApiKeyChange={handleApiKeyChange}
+          onReset={() => {
+            setStep(1);
+            setScreen1Data(null);
+            setBuildPayload(null);
+          }}
+          onStepClick={(s) => setStep(s)}
+        />
         <main style={{ paddingBottom: 60, position: 'relative', zIndex: 1 }}>
           {step === 1 && (
             <div className="anim-fade">

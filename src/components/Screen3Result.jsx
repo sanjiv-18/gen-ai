@@ -105,7 +105,10 @@ export default function Screen3Result({ data, onBack, apiKey }) {
 
   async function handleBulletEdit(bulletIndex, newText) {
     const bullet = bullets[bulletIndex];
+    if (!bullet) return;
     setRevalidating(bulletIndex);
+    const oldText = bullet.text;
+
     try {
       const updated = { ...bullet, text: newText };
       const result = await apiRevalidate({ bullet: updated, rawText: data.rawText, userAnswers: data.userAnswers || {} });
@@ -113,7 +116,6 @@ export default function Screen3Result({ data, onBack, apiKey }) {
       newBullets[bulletIndex] = result;
       setBullets(newBullets);
     } catch (e) {
-      // Just update the text without re-validation
       const newBullets = [...bullets];
       newBullets[bulletIndex] = { ...bullet, text: newText };
       setBullets(newBullets);
@@ -121,7 +123,49 @@ export default function Screen3Result({ data, onBack, apiKey }) {
       setRevalidating(null);
       setEditingBullet(null);
     }
+
+    // Synchronize resume state in buildData so the preview, plainText, and PDF stay up-to-date
+    setBuildData(prev => {
+      if (!prev || !prev.resume) return prev;
+      const newResume = { ...prev.resume };
+      let found = false;
+      if (newResume.experience) {
+        newResume.experience = newResume.experience.map(exp => ({
+          ...exp,
+          bullets: (exp.bullets || []).map(b => {
+            if (b === oldText || b.trim() === oldText.trim()) {
+              found = true;
+              return newText;
+            }
+            return b;
+          })
+        }));
+      }
+      if (!found && newResume.projects) {
+        newResume.projects = newResume.projects.map(proj => ({
+          ...proj,
+          bullets: (proj.bullets || []).map(b => {
+            if (b === oldText || b.trim() === oldText.trim()) {
+              return newText;
+            }
+            return b;
+          })
+        }));
+      }
+      return { ...prev, resume: newResume };
+    });
   }
+
+  function handleConfirmBullet(bulletIndex) {
+    const newBullets = [...bullets];
+    newBullets[bulletIndex] = {
+      ...newBullets[bulletIndex],
+      verified: true,
+      status: 'verified'
+    };
+    setBullets(newBullets);
+  }
+
 
   function handlePrint() {
     window.print();
@@ -388,17 +432,32 @@ export default function Screen3Result({ data, onBack, apiKey }) {
                   display: 'flex', alignItems: 'flex-start', gap: 8
                 }}>
                   {/* Sidebar-only Truth Lock badge — this is review UI, not part of the resume */}
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 3,
-                    fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
-                    borderRadius: 99, flexShrink: 0,
-                    background: b.verified ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.12)',
-                    color: b.verified ? '#059669' : '#d97706',
-                    border: `1px solid ${b.verified ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`
-                  }}>
-                    {b.verified ? <CheckCircle2 size={9} /> : <AlertTriangle size={9} />}
-                    {b.verified ? 'Verified' : 'Confirm'}
-                  </span>
+                  {b.verified ? (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 3,
+                      fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
+                      borderRadius: 99, flexShrink: 0,
+                      background: 'rgba(52,211,153,0.15)', color: '#6ee7b7',
+                      border: '1px solid rgba(52,211,153,0.35)'
+                    }}>
+                      <CheckCircle2 size={10} /> Verified
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleConfirmBullet(i)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                        fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px',
+                        borderRadius: 99, flexShrink: 0,
+                        background: 'rgba(251,191,36,0.18)', color: '#fde68a',
+                        border: '1px solid rgba(251,191,36,0.4)',
+                        cursor: 'pointer', fontFamily: 'inherit'
+                      }}
+                      title="Click to manually confirm and verify this bullet"
+                    >
+                      <AlertTriangle size={10} /> Confirm
+                    </button>
+                  )}
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', flex: 1, lineHeight: 1.5 }}>
                     {b.text?.slice(0, 80)}{b.text?.length > 80 ? '...' : ''}
                   </span>
@@ -412,13 +471,18 @@ export default function Screen3Result({ data, onBack, apiKey }) {
       </div>
 
       {/* ── Nav Buttons ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 32 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 32, flexWrap: 'wrap', gap: 12 }}>
         <button className="btn btn-ghost" onClick={onBack}>
           <ChevronLeft size={16} /> Back to Review
         </button>
-        <button className="btn btn-primary btn-lg" onClick={handlePrint}>
-          <Download size={18} /> Download PDF
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button className="btn btn-secondary" onClick={() => window.location.href = '/'}>
+            🔄 Start New Resume
+          </button>
+          <button className="btn btn-primary btn-lg" onClick={handlePrint}>
+            <Download size={18} /> Download PDF
+          </button>
+        </div>
       </div>
     </div>
   );

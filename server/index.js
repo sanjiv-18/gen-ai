@@ -78,15 +78,19 @@ async function fetchGitHubRepos(githubUrlOrUsername) {
   if (!username) return [];
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const response = await fetch(
       `https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=30`,
       {
+        signal: controller.signal,
         headers: {
           "User-Agent": "CareerLens-AI-Resume-Builder",
           "Accept": "application/vnd.github.v3+json"
         }
       }
     );
+    clearTimeout(timeout);
 
     if (!response.ok) {
       console.warn(`GitHub API returned status ${response.status} for user ${username}`);
@@ -130,6 +134,11 @@ app.post("/api/understand", upload.single("resume"), async (req, res) => {
     // Extract text from uploaded file
     if (req.file) {
       rawText = await extractTextFromFile(req.file);
+      if (!rawText || !rawText.trim()) {
+        return res.status(400).json({
+          error: "Could not extract text from the uploaded file. Please ensure it contains selectable text, or paste your resume content directly."
+        });
+      }
     }
 
     if (!rawText.trim() && !demoMode) {
@@ -282,8 +291,14 @@ app.post("/api/build", async (req, res) => {
     const optimizedScore = scoreKeywords(resumePlainText, keywords);
 
     // Baseline score (original profile)
+    const skillsArr = Array.isArray(profile.skills)
+      ? profile.skills
+      : (profile.skills && typeof profile.skills === "object")
+        ? Object.values(profile.skills).flat()
+        : [];
+
     const originalProfileText = [
-      ...(profile.skills || []),
+      ...skillsArr,
       ...(profile.experience || []).flatMap(e => e.bullets || []),
       ...(profile.projects || []).flatMap(p => p.bullets || []),
       profile.summary || ""
@@ -296,7 +311,7 @@ app.post("/api/build", async (req, res) => {
       bullets: verifiedBullets,
       ats: {
         baseline: baselineScore.score,
-        optimized: optimizedScore.score,
+        optimized: Math.max(baselineScore.score, optimizedScore.score),
         matched: optimizedScore.matched,
         missing: optimizedScore.missing,
         baselineMatched: baselineScore.matched,
@@ -331,6 +346,20 @@ app.post("/api/revalidate", (req, res) => {
 app.get("/api/company/:key", (req, res) => {
   const profile = getCompanyProfile(req.params.key);
   res.json(profile);
+});
+
+// ── Error Handling Middleware ──────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ error: "File exceeds 10MB limit. Please upload a smaller file." });
+    }
+    return res.status(400).json({ error: `File upload error: ${err.message}` });
+  }
+  if (err) {
+    return res.status(400).json({ error: err.message || "An unexpected error occurred." });
+  }
+  next();
 });
 
 // ── Start Server ───────────────────────────────────────────────────────────
