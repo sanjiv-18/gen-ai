@@ -326,6 +326,18 @@ function cleanRepoOrProjectName(str) {
   return s || "Software Project";
 }
 
+function safeMatchKeyword(text, keyword) {
+  if (!text || !keyword) return false;
+  try {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const prefix = /^\w/.test(keyword) ? '\\b' : '(?:^|\\s|[^a-zA-Z0-9])';
+    const suffix = /\w$/.test(keyword) ? '\\b' : '(?:$|\\s|[^a-zA-Z0-9])';
+    return new RegExp(`${prefix}${escaped}${suffix}`, 'i').test(text);
+  } catch {
+    return text.toLowerCase().includes(keyword.toLowerCase());
+  }
+}
+
 function parseResumeText(rawText) {
   if (!rawText || typeof rawText !== 'string') return null;
   const rawLines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
@@ -358,8 +370,7 @@ function parseResumeText(rawText) {
 
   const foundSkillsSet = new Set();
   TECH_KEYWORDS.forEach(tech => {
-    const escaped = tech.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`(?:^|[^a-zA-Z0-9_])${escaped}(?:$|[^a-zA-Z0-9_])`, 'i').test(rawText)) {
+    if (safeMatchKeyword(rawText, tech)) {
       foundSkillsSet.add(tech);
     }
   });
@@ -407,9 +418,13 @@ function parseResumeText(rawText) {
 
   // Parse Skills from Skills section text
   if (sections.skills.length > 0) {
-    sections.skills.join(" ").split(/[,|/•\-\*\n]/).forEach(item => {
-      const cleaned = item.replace(/^(technical\s+skills|skills|languages|frameworks|tools|databases|cloud):?/i, '').trim();
-      if (cleaned && cleaned.length > 1 && cleaned.length < 30) {
+    sections.skills.join(" ").split(/[,|/•\n]/).forEach(item => {
+      const cleaned = item
+        .replace(/^(technical\s+skills|skills|languages|frameworks|tools|databases|cloud):?/i, '')
+        .replace(/^[-*•]\s*/, '')
+        .replace(/[()]/g, '')
+        .trim();
+      if (cleaned && cleaned.length > 1 && cleaned.length < 35) {
         foundSkillsSet.add(cleaned);
       }
     });
@@ -464,7 +479,7 @@ function parseResumeText(rawText) {
 
       const title = cleanRepoOrProjectName(cleanLine);
       const projTech = Array.from(foundSkillsSet).filter(tech =>
-        new RegExp(`\\b${tech.replace('+', '\\+')}\\b`, 'i').test(cleanLine)
+        safeMatchKeyword(cleanLine, tech)
       );
 
       currentProj = {
@@ -479,7 +494,7 @@ function parseResumeText(rawText) {
       if (cleanBullet) {
         currentProj.bullets.push(cleanBullet);
         TECH_KEYWORDS.forEach(tech => {
-          if (new RegExp(`\\b${tech.replace('+', '\\+')}\\b`, 'i').test(cleanBullet)) {
+          if (safeMatchKeyword(cleanBullet, tech)) {
             if (!currentProj.tech.includes(tech)) currentProj.tech.push(tech);
           }
         });

@@ -150,8 +150,13 @@ function revalidateBullet(bullet, rawInputText, userAnswers = {}) {
 function normalizeWithAliases(text) {
   let normalized = text.toLowerCase();
   Object.entries(ALIAS_DICT).forEach(([alias, full]) => {
-    const regex = new RegExp(`\\b${alias}\\b`, 'gi');
-    normalized = normalized.replace(regex, full);
+    try {
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+      normalized = normalized.replace(regex, full);
+    } catch {
+      normalized = normalized.split(alias.toLowerCase()).join(full);
+    }
   });
   return normalized;
 }

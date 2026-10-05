@@ -128,7 +128,7 @@ export default function ResumeTemplate({
   }
 
   const accentColor =
-    company === 'amazon' ? '#f97316' :
+    company === 'amazon' ? '#ff9990' :
     company === 'zoho'   ? '#eab308' :
     company === 'tcs'    ? '#06b6d4' :
     company === 'infosys'? '#6366f1' :
@@ -205,8 +205,8 @@ export default function ResumeTemplate({
               <div>
                 <span style={{ fontWeight: 700, fontSize: '0.87rem', color: '#0f172a' }}>{exp.title}</span>
                 <span style={{ color: '#475569', fontSize: '0.82rem' }}> · {exp.company}</span>
-              </div>
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0, marginLeft: 10 }}>{exp.duration}</span>
+              </div> 
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0, marginLeft: 8 }}>{exp.duration}</span>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
               {(exp.bullets || []).map((b, bi) => renderBullet(b, bi, 1000 + i))}
