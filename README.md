@@ -2,9 +2,7 @@
 
 <div align="center">
 
-![CareerLens AI](https://img.shields.io/badge/CareerLens-AI%20Resume%20Builder-4F46E5?style=for-the-badge&logo=sparkles&logoColor=white)
-[![Vercel Deployment](https://img.shields.io/badge/Live%20Demo-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://careerlens-ai-wheat.vercel.app)
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/sanjiv-18/gen-ai)
+
 
 **ATS-Optimized · Company-Tailored · Truth-Locked AI Resume Architect**
 
