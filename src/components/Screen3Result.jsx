@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  ChevronLeft, Download, Monitor, Code2, CheckCircle2, AlertTriangle,
-  ChevronDown, ChevronUp, TrendingUp, RefreshCw, Eye, FileText,
-  Info, Sparkles, Award, Edit3, Check, X
+  ChevronLeft, Download, Code2, CheckCircle2, AlertTriangle,
+  ChevronDown, ChevronUp, TrendingUp, RefreshCw,
+  Info, Sparkles, Award, Edit3
 } from 'lucide-react';
 import { apiBuild, apiRevalidate } from '../services/api';
 import ResumeTemplate from './ResumeTemplate';
+
 
 // Animated Counter
 function AnimatedNumber({ from, to, duration = 1200 }) {
@@ -46,14 +47,6 @@ function ScoreRing({ score, color, size = 100 }) {
   );
 }
 
-// Truth Lock Badge
-function TruthBadge({ verified }) {
-  return (
-    <span className={`truth-badge ${verified ? 'truth-badge-verified' : 'truth-badge-unverified'}`}>
-      {verified ? <><CheckCircle2 size={9} /> Verified</> : <><AlertTriangle size={9} /> Confirm</>}
-    </span>
-  );
-}
 
 export default function Screen3Result({ data, onBack, apiKey }) {
   const [buildData, setBuildData] = useState(null);
@@ -65,10 +58,25 @@ export default function Screen3Result({ data, onBack, apiKey }) {
   const [bullets, setBullets] = useState([]);
   const [revalidating, setRevalidating] = useState(null);
   const [showAllChanges, setShowAllChanges] = useState(false);
+  // printMode=true → ResumeTemplate renders CleanBullet (zero verification UI)
+  const [printMode, setPrintMode] = useState(false);
   const printRef = useRef(null);
 
   useEffect(() => {
     buildResume();
+  }, []);
+
+  // Switch to clean print mode before the browser print dialog opens,
+  // then restore interactive mode after it closes.
+  useEffect(() => {
+    function onBeforePrint() { setPrintMode(true); }
+    function onAfterPrint()  { setPrintMode(false); }
+    window.addEventListener('beforeprint', onBeforePrint);
+    window.addEventListener('afterprint',  onAfterPrint);
+    return () => {
+      window.removeEventListener('beforeprint', onBeforePrint);
+      window.removeEventListener('afterprint',  onAfterPrint);
+    };
   }, []);
 
   async function buildResume() {
@@ -297,6 +305,7 @@ export default function Screen3Result({ data, onBack, apiKey }) {
                 editingBullet={editingBullet}
                 setEditingBullet={setEditingBullet}
                 revalidating={revalidating}
+                printMode={printMode}
               />
             )}
           </div>
@@ -378,13 +387,25 @@ export default function Screen3Result({ data, onBack, apiKey }) {
                   border: `1px solid ${b.verified ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)'}`,
                   display: 'flex', alignItems: 'flex-start', gap: 8
                 }}>
-                  <TruthBadge verified={b.verified} />
+                  {/* Sidebar-only Truth Lock badge — this is review UI, not part of the resume */}
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    fontSize: '0.65rem', fontWeight: 700, padding: '1px 6px',
+                    borderRadius: 99, flexShrink: 0,
+                    background: b.verified ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.12)',
+                    color: b.verified ? '#059669' : '#d97706',
+                    border: `1px solid ${b.verified ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`
+                  }}>
+                    {b.verified ? <CheckCircle2 size={9} /> : <AlertTriangle size={9} />}
+                    {b.verified ? 'Verified' : 'Confirm'}
+                  </span>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', flex: 1, lineHeight: 1.5 }}>
                     {b.text?.slice(0, 80)}{b.text?.length > 80 ? '...' : ''}
                   </span>
                   {revalidating === i && <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2, flexShrink: 0 }} />}
                 </div>
               ))}
+
             </div>
           </div>
         </div>

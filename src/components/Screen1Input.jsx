@@ -182,65 +182,114 @@ export default function Screen1Input({ onNext, apiKey }) {
       {/* ── Entry Mode Selection ── */}
       {!entryMode && (
         <div className="grid-2 anim-fade" style={{ marginBottom: 32, animationDelay: '0.15s' }}>
-          <button
+          <div
             className="card"
             onClick={() => setEntryMode('upload')}
             style={{
               textAlign: 'left', cursor: 'pointer',
-              border: '1px solid rgba(99,102,241,0.2)',
-              transition: 'all 0.2s',
-              background: 'none'
+              border: '1px solid rgba(99,102,241,0.3)',
+              background: 'linear-gradient(145deg, rgba(16,19,41,0.95) 0%, rgba(26,29,62,0.85) 100%)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.35), 0 0 20px rgba(99,102,241,0.12)',
+              transition: 'all 0.25s ease',
+              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              borderRadius: 'var(--radius-lg)',
+              padding: '28px 24px'
             }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(99,102,241,0.2)'}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'rgba(99,102,241,0.7)';
+              e.currentTarget.style.transform = 'translateY(-3px)';
+              e.currentTarget.style.boxShadow = '0 12px 36px rgba(0,0,0,0.5), 0 0 30px rgba(99,102,241,0.25)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.35), 0 0 20px rgba(99,102,241,0.12)';
+            }}
           >
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'rgba(99,102,241,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 14
-            }}>
-              <Upload size={22} color="#a5b4fc" />
+            <div>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(139,92,246,0.2))',
+                border: '1px solid rgba(99,102,241,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 16
+              }}>
+                <Upload size={24} color="#a5b4fc" />
+              </div>
+              <h3 style={{ marginBottom: 8, color: '#F8FAFF', fontSize: '1.25rem', fontWeight: 700 }}>
+                Upload Your Resume
+              </h3>
+              <p style={{ color: '#B8C0D9', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: 16 }}>
+                Drop your PDF, DOCX or TXT here. We'll parse, analyze, and enhance it.
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+                {['PDF', 'DOCX', 'TXT'].map(f => (
+                  <span key={f} className="badge badge-indigo" style={{ fontSize: '0.72rem' }}>{f}</span>
+                ))}
+              </div>
             </div>
-            <h3 style={{ marginBottom: 6 }}>Upload Resume</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.87rem' }}>
-              Upload your existing resume (PDF, DOCX, or TXT). We'll parse and enhance it.
-            </p>
-            <div style={{ marginTop: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['PDF', 'DOCX', 'TXT'].map(f => (
-                <span key={f} className="badge badge-muted">{f}</span>
-              ))}
-            </div>
-          </button>
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: '0.88rem' }}
+            >
+              <Upload size={16} /> Choose Resume
+            </button>
+          </div>
 
-          <button
+          <div
             className="card"
             onClick={() => setEntryMode('scratch')}
             style={{
               textAlign: 'left', cursor: 'pointer',
-              border: '1px solid rgba(139,92,246,0.2)',
-              transition: 'all 0.2s',
-              background: 'none'
+              border: '1px solid rgba(139,92,246,0.3)',
+              background: 'linear-gradient(145deg, rgba(16,19,41,0.95) 0%, rgba(28,24,64,0.85) 100%)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.35), 0 0 20px rgba(139,92,246,0.12)',
+              transition: 'all 0.25s ease',
+              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              borderRadius: 'var(--radius-lg)',
+              padding: '28px 24px'
             }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(139,92,246,0.2)'}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'rgba(139,92,246,0.7)';
+              e.currentTarget.style.transform = 'translateY(-3px)';
+              e.currentTarget.style.boxShadow = '0 12px 36px rgba(0,0,0,0.5), 0 0 30px rgba(139,92,246,0.25)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.35), 0 0 20px rgba(139,92,246,0.12)';
+            }}
           >
-            <div style={{
-              width: 44, height: 44, borderRadius: 12,
-              background: 'rgba(139,92,246,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 14
-            }}>
-              <PenLine size={22} color="#c4b5fd" />
+            <div>
+              <div style={{
+                width: 48, height: 48, borderRadius: 14,
+                background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(236,72,153,0.2))',
+                border: '1px solid rgba(139,92,246,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 16
+              }}>
+                <PenLine size={24} color="#ddd6fe" />
+              </div>
+              <h3 style={{ marginBottom: 8, color: '#F8FAFF', fontSize: '1.25rem', fontWeight: 700 }}>
+                Build From Scratch
+              </h3>
+              <p style={{ color: '#B8C0D9', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: 16 }}>
+                Create your resume with our guided AI workflow. Perfect for first-time builders.
+              </p>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
+                <span className="badge badge-violet" style={{ fontSize: '0.72rem' }}>✨ Guided Workflow</span>
+              </div>
             </div>
-            <h3 style={{ marginBottom: 6 }}>Start Fresh</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.87rem' }}>
-              Build from scratch with our guided form. Perfect for first-time resume builders.
-            </p>
-            <div style={{ marginTop: 14 }}>
-              <span className="badge badge-violet">✨ Guided</span>
-            </div>
-          </button>
+            <button
+              className="btn btn-primary"
+              style={{
+                width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: '0.88rem',
+                background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
+              }}
+            >
+              <PenLine size={16} /> Start Building →
+            </button>
+          </div>
         </div>
       )}
 

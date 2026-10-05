@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Zap, Key, X, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Zap, Key, X, Eye, EyeOff } from 'lucide-react';
 
 export default function Navbar({ step, apiKey, onApiKeyChange }) {
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [tempKey, setTempKey] = useState(apiKey || '');
-  const [showKey, setShowKey] = useState(false);
+  const [tempKey, setTempKey]   = useState(apiKey || '');
+  const [showKey, setShowKey]   = useState(false);
 
   const steps = [
     { num: 1, label: 'Input' },
     { num: 2, label: 'Review' },
-    { num: 3, label: 'Result' }
+    { num: 3, label: 'Result' },
   ];
 
   function saveKey() {
@@ -19,31 +19,34 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
 
   return (
     <>
+      {/* ── Nav bar ── */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(8,8,18,0.85)',
+        background: 'rgba(8, 10, 24, 0.88)',
         backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: '1px solid rgba(37,42,74,0.9)',
         padding: '0 24px',
-        height: '64px',
+        height: 64,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        boxShadow: '0 1px 0 rgba(99,102,241,0.08), 0 4px 24px rgba(0,0,0,0.4)',
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
+            width: 36, height: 36, borderRadius: 10,
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 16px rgba(99,102,241,0.45)',
           }}>
             <Zap size={18} color="white" />
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em' }}>
+            <div style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em', color: '#F8FAFF' }}>
               CareerLens <span className="gradient-text">AI</span>
             </div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: -2 }}>ATS Resume Builder</div>
+            <div style={{ fontSize: '0.65rem', color: '#8D96B3', marginTop: -2 }}>ATS Resume Builder</div>
           </div>
         </div>
 
@@ -57,27 +60,27 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
                 fontSize: '0.78rem', fontWeight: 700,
                 background: step === s.num
                   ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
-                  : step > s.num ? '#10b981' : 'rgba(255,255,255,0.06)',
-                border: step === s.num ? 'none' : step > s.num ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                boxShadow: step === s.num ? '0 0 16px rgba(99,102,241,0.5)' : 'none',
-                color: step >= s.num ? 'white' : 'var(--text-muted)',
+                  : step > s.num ? '#34d399' : 'rgba(255,255,255,0.06)',
+                border: step === s.num ? 'none' : step > s.num ? 'none' : '1px solid rgba(37,42,74,0.9)',
+                boxShadow: step === s.num ? '0 0 18px rgba(99,102,241,0.55)' : 'none',
+                color: step >= s.num ? 'white' : '#8D96B3',
                 transition: 'all 0.3s ease',
                 position: 'relative',
               }}>
                 {step > s.num ? '✓' : s.num}
                 {step === s.num && (
                   <div style={{
-                    position: 'absolute', bottom: -18,
-                    fontSize: '0.65rem', fontWeight: 600,
-                    color: '#a5b4fc', whiteSpace: 'nowrap'
+                    position: 'absolute', bottom: -20,
+                    fontSize: '0.63rem', fontWeight: 600,
+                    color: '#a5b4fc', whiteSpace: 'nowrap',
                   }}>{s.label}</div>
                 )}
               </div>
               {i < steps.length - 1 && (
                 <div style={{
                   width: 48, height: 2,
-                  background: step > s.num ? '#10b981' : 'rgba(255,255,255,0.08)',
-                  transition: 'background 0.3s ease'
+                  background: step > s.num ? '#34d399' : 'rgba(37,42,74,0.9)',
+                  transition: 'background 0.3s ease',
                 }} />
               )}
             </div>
@@ -85,34 +88,35 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
         </div>
 
         {/* API Key Button */}
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => setShowKeyModal(true)}
-          style={{ gap: 6 }}
-        >
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowKeyModal(true)} style={{ gap: 6 }}>
           <Key size={14} />
-          {apiKey ? (
-            <span style={{ color: '#6ee7b7' }}>API Key ✓</span>
-          ) : (
-            <span>API Key</span>
-          )}
+          {apiKey
+            ? <span style={{ color: '#34d399' }}>API Key ✓</span>
+            : <span style={{ color: '#B8C0D9' }}>API Key</span>}
         </button>
       </nav>
 
-      {/* API Key Modal */}
+      {/* ── API Key Modal ── */}
       {showKeyModal && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 200,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 24
-        }} onClick={() => setShowKeyModal(false)}>
-          <div className="card" style={{ width: '100%', maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => setShowKeyModal(false)}
+        >
+          <div
+            className="card"
+            style={{ width: '100%', maxWidth: 460, background: '#0D1025', border: '1px solid rgba(99,102,241,0.3)' }}
+            onClick={e => e.stopPropagation()}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <h3 style={{ marginBottom: 4 }}>Gemini API Key</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <h3 style={{ color: '#F8FAFF', marginBottom: 4 }}>Gemini API Key</h3>
+                <p style={{ fontSize: '0.8rem', color: '#8D96B3' }}>
                   Required for real AI generation. Leave blank to use demo mode.
                 </p>
               </div>
@@ -121,6 +125,7 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
               </button>
             </div>
 
+            {/* Input */}
             <div style={{ position: 'relative', marginBottom: 12 }}>
               <input
                 className="input"
@@ -134,29 +139,32 @@ export default function Navbar({ step, apiKey, onApiKeyChange }) {
                 onClick={() => setShowKey(!showKey)}
                 style={{
                   position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--text-muted)'
+                  background: 'none', border: 'none', cursor: 'pointer', color: '#8D96B3',
                 }}
               >
                 {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
 
+            {/* Info box */}
             <div style={{
-              background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)',
+              background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)',
               borderRadius: 8, padding: '10px 14px', marginBottom: 16,
-              fontSize: '0.8rem', color: '#67e8f9'
+              fontSize: '0.8rem', color: '#a5f3fc',
             }}>
               💡 Get your free key at{' '}
               <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer"
-                style={{ color: '#67e8f9', textDecoration: 'underline' }}>
+                style={{ color: '#22d3ee', textDecoration: 'underline' }}>
                 Google AI Studio
               </a>
               . Use Gemini 2.0 Flash for best results.
             </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setTempKey(''); onApiKeyChange(''); setShowKeyModal(false); }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { setTempKey(''); onApiKeyChange(''); setShowKeyModal(false); }}
+              >
                 Clear
               </button>
               <button className="btn btn-primary btn-sm" onClick={saveKey}>Save Key</button>

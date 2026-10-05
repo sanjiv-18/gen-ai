@@ -1,12 +1,9 @@
 import { useState, useRef } from 'react';
-import { CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 
-// Find bullet index by section + text
-function getBulletBySection(bullets, section, text) {
-  return bullets.findIndex(b => b.section === section && (b.text === text || (text || '').includes((b.text || '').slice(0, 30))));
-}
-
-// Inline Editable Bullet
+// ─── Inline Editable Bullet ─────────────────────────────────────────────────
+// Shown ONLY in interactive mode (Review/Preview screen).
+// Never rendered when printMode=true.
 function EditableBullet({ text, bulletIndex, verified, revalidating, onEdit, editingBullet, setEditingBullet }) {
   const [draft, setDraft] = useState(text);
   const isEditing = editingBullet === bulletIndex;
@@ -43,12 +40,20 @@ function EditableBullet({ text, bulletIndex, verified, revalidating, onEdit, edi
                 fontSize: '0.82rem', fontFamily: 'inherit', color: '#1a1a2e',
                 resize: 'vertical', minHeight: 36, lineHeight: 1.4
               }}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); } if (e.key === 'Escape') setEditingBullet(null); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+                if (e.key === 'Escape') setEditingBullet(null);
+              }}
             />
-            <button onClick={commitEdit} style={{
-              background: '#10b981', border: 'none', borderRadius: 4,
-              padding: '4px 8px', cursor: 'pointer', color: 'white', fontSize: '0.75rem', flexShrink: 0
-            }}>
+            {/* Save button — hidden by .no-print during PDF export */}
+            <button
+              onClick={commitEdit}
+              className="no-print"
+              style={{
+                background: '#10b981', border: 'none', borderRadius: 4,
+                padding: '4px 8px', cursor: 'pointer', color: 'white', fontSize: '0.75rem', flexShrink: 0
+              }}
+            >
               <CheckCircle2 size={13} />
             </button>
           </div>
@@ -62,75 +67,103 @@ function EditableBullet({ text, bulletIndex, verified, revalidating, onEdit, edi
             {text}
           </span>
         )}
-        {!isEditing && (
-          revalidating === bulletIndex
-            ? <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2, flexShrink: 0 }} />
-            : verified !== undefined && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 2,
-                fontSize: '0.6rem', fontWeight: 700, padding: '1px 5px',
-                borderRadius: 99, flexShrink: 0, marginTop: 2,
-                background: verified ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
-                color: verified ? '#059669' : '#d97706',
-                border: `1px solid ${verified ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)'}`
-              }}>
-                {verified ? <CheckCircle2 size={8} /> : <AlertTriangle size={8} />}
-                {verified ? 'Verified' : 'Confirm'}
-              </span>
-            )
+        {/* Revalidating spinner only — no verification badge in the resume */}
+        {!isEditing && revalidating === bulletIndex && (
+          <div className="spinner no-print" style={{ width: 12, height: 12, borderWidth: 2, flexShrink: 0 }} />
         )}
+
       </div>
     </li>
   );
 }
 
-export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, company, onBulletEdit, editingBullet, setEditingBullet, revalidating }) {
+// ─── Clean Read-Only Bullet ──────────────────────────────────────────────────
+// Used when printMode=true. Renders ONLY the bullet text — no badges, no edit
+// controls, no verification overlays of any kind.
+function CleanBullet({ text }) {
+  return (
+    <li style={{ marginBottom: 3, display: 'flex', gap: 6, alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
+      <span style={{ color: '#6366f1', flexShrink: 0, marginTop: 2, fontSize: '0.8em' }}>▸</span>
+      <span style={{ flex: 1, fontSize: '0.82rem', lineHeight: 1.5, color: '#1e293b' }}>{text}</span>
+    </li>
+  );
+}
+
+// ─── ResumeTemplate ──────────────────────────────────────────────────────────
+// Props:
+//   printMode (bool, default false) — when true, renders a fully clean resume
+//   with zero verification / review UI elements.
+export default function ResumeTemplate({
+  resume,
+  bullets,
+  sectionOrder,
+  mode,
+  company,
+  onBulletEdit,
+  editingBullet,
+  setEditingBullet,
+  revalidating,
+  printMode = false,
+}) {
   if (!resume) return null;
 
   const { header, summary, skills, experience, education, projects, certifications } = resume;
 
-  // Build bullet lookup map
+  // Build bullet lookup map (only needed in interactive mode)
   const bulletMap = {};
-  (bullets || []).forEach((b, i) => {
-    bulletMap[b.text?.slice(0, 50)] = { index: i, verified: b.verified };
-  });
+  if (!printMode) {
+    (bullets || []).forEach((b, i) => {
+      bulletMap[b.text?.slice(0, 50)] = { index: i, verified: b.verified };
+    });
+  }
 
   function getBulletInfo(text) {
     const key = (text || '').slice(0, 50);
     const match = bulletMap[key];
     if (!match) {
-      // fuzzy: find by partial text
       const entry = Object.entries(bulletMap).find(([k]) => k && text && text.includes(k.slice(0, 20)));
       return entry ? { index: entry[1].index, verified: entry[1].verified } : { index: -1, verified: undefined };
     }
     return match;
   }
 
-  const templateStyle = company === 'amazon' ? 'impact' : company === 'zoho' ? 'minimal' : 'clean';
+  const accentColor =
+    company === 'amazon' ? '#f97316' :
+    company === 'zoho'   ? '#eab308' :
+    company === 'tcs'    ? '#06b6d4' :
+    company === 'infosys'? '#6366f1' :
+    '#6366f1';
 
-  const accentColor = company === 'amazon' ? '#f97316'
-    : company === 'zoho' ? '#eab308'
-    : company === 'tcs' ? '#06b6d4'
-    : company === 'infosys' ? '#6366f1'
-    : '#6366f1';
+  // Renders a single bullet — CleanBullet in printMode, EditableBullet otherwise
+  function renderBullet(b, bi, indexOffset = 0) {
+    if (printMode) {
+      return <CleanBullet key={bi} text={b} />;
+    }
+    const bInfo = getBulletInfo(b);
+    return (
+      <EditableBullet
+        key={bi}
+        text={b}
+        bulletIndex={bInfo.index >= 0 ? bInfo.index : bi + indexOffset}
+        verified={bInfo.verified}
+        revalidating={revalidating}
+        onEdit={onBulletEdit}
+        editingBullet={editingBullet}
+        setEditingBullet={setEditingBullet}
+      />
+    );
+  }
 
   const sectionComponents = {
     header: (
-      <div key="header" style={{
-        borderBottom: `3px solid ${accentColor}`,
-        paddingBottom: 14, marginBottom: 16
-      }}>
+      <div key="header" style={{ borderBottom: `3px solid ${accentColor}`, paddingBottom: 14, marginBottom: 16 }}>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f0f1a', marginBottom: 3 }}>{header?.name}</h1>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', fontSize: '0.78rem', color: '#475569' }}>
-          {header?.email && <span>📧 {header.email}</span>}
-          {header?.phone && <span>📱 {header.phone}</span>}
+          {header?.email    && <span>📧 {header.email}</span>}
+          {header?.phone    && <span>📱 {header.phone}</span>}
           {header?.location && <span>📍 {header.location}</span>}
-          {header?.linkedin && (
-            <span style={{ color: '#0077b5' }}>🔗 {header.linkedin}</span>
-          )}
-          {header?.github && (
-            <span>⚡ {header.github}</span>
-          )}
+          {header?.linkedin && <span style={{ color: '#0077b5' }}>🔗 {header.linkedin}</span>}
+          {header?.github   && <span>⚡ {header.github}</span>}
         </div>
       </div>
     ),
@@ -151,11 +184,11 @@ export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, co
         </div>
         {typeof skills === 'object' && !Array.isArray(skills)
           ? Object.entries(skills).filter(([, v]) => v?.length).map(([cat, items]) => (
-            <div key={cat} style={{ display: 'flex', gap: 6, marginBottom: 3, fontSize: '0.78rem', alignItems: 'flex-start' }}>
-              <span style={{ fontWeight: 700, color: '#334155', minWidth: 90, flexShrink: 0 }}>{cat}:</span>
-              <span style={{ color: '#475569' }}>{Array.isArray(items) ? items.join(' · ') : items}</span>
-            </div>
-          ))
+              <div key={cat} style={{ display: 'flex', gap: 6, marginBottom: 3, fontSize: '0.78rem', alignItems: 'flex-start' }}>
+                <span style={{ fontWeight: 700, color: '#334155', minWidth: 90, flexShrink: 0 }}>{cat}:</span>
+                <span style={{ color: '#475569' }}>{Array.isArray(items) ? items.join(' · ') : items}</span>
+              </div>
+            ))
           : <div style={{ fontSize: '0.78rem', color: '#475569' }}>{(Array.isArray(skills) ? skills : []).join(' · ')}</div>
         }
       </div>
@@ -176,21 +209,7 @@ export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, co
               <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0, marginLeft: 10 }}>{exp.duration}</span>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {(exp.bullets || []).map((b, bi) => {
-                const bInfo = getBulletInfo(b);
-                return (
-                  <EditableBullet
-                    key={bi}
-                    text={b}
-                    bulletIndex={bInfo.index >= 0 ? bInfo.index : bi + 1000 + i}
-                    verified={bInfo.verified}
-                    revalidating={revalidating}
-                    onEdit={onBulletEdit}
-                    editingBullet={editingBullet}
-                    setEditingBullet={setEditingBullet}
-                  />
-                );
-              })}
+              {(exp.bullets || []).map((b, bi) => renderBullet(b, bi, 1000 + i))}
             </ul>
           </div>
         ))}
@@ -236,26 +255,10 @@ export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, co
                   </span>
                 )}
               </div>
-              {proj.link && (
-                <span style={{ fontSize: '0.72rem', color: accentColor }}>{proj.link}</span>
-              )}
+              {proj.link && <span style={{ fontSize: '0.72rem', color: accentColor }}>{proj.link}</span>}
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-              {(proj.bullets || []).map((b, bi) => {
-                const bInfo = getBulletInfo(b);
-                return (
-                  <EditableBullet
-                    key={bi}
-                    text={b}
-                    bulletIndex={bInfo.index >= 0 ? bInfo.index : bi + 2000 + i}
-                    verified={bInfo.verified}
-                    revalidating={revalidating}
-                    onEdit={onBulletEdit}
-                    editingBullet={editingBullet}
-                    setEditingBullet={setEditingBullet}
-                  />
-                );
-              })}
+              {(proj.bullets || []).map((b, bi) => renderBullet(b, bi, 2000 + i))}
             </ul>
           </div>
         ))}
@@ -279,7 +282,7 @@ export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, co
           ))}
         </div>
       </div>
-    ) : null
+    ) : null,
   };
 
   const orderedSections = sectionOrder || Object.keys(sectionComponents);
@@ -295,14 +298,24 @@ export default function ResumeTemplate({ resume, bullets, sectionOrder, mode, co
       color: '#1e293b',
       fontSize: '0.82rem',
     }}>
-      {/* Print Styles */}
+      {/*
+        ── Print / Export CSS ────────────────────────────────────────────────
+        Double layer of protection:
+          1. printMode=true → CleanBullet renders with zero verification DOM.
+          2. @media print   → .no-print, badges, buttons, spinners are hidden.
+        Result: 0 occurrences of "Confirm", "Verified" badges, or any review UI
+                in the downloaded PDF.
+      */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
           #resume-print, #resume-print * { visibility: visible; }
           #resume-print { position: absolute; left: 0; top: 0; width: 100%; }
-          .truth-badge { display: none !important; }
-          .bullet-editable:after { display: none; }
+          .no-print,
+          .truth-badge,
+          .resume-verify-badge,
+          .spinner,
+          button { display: none !important; }
         }
       `}</style>
 
