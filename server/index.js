@@ -45,13 +45,46 @@ async function extractTextFromFile(file) {
   }
   
   if (ext === ".pdf") {
+    const pdfParse = require("pdf-parse");
+
+    // First attempt: standard parse
     try {
-      const pdfParse = require("pdf-parse");
       const data = await pdfParse(file.buffer);
-      return data.text;
-    } catch (e) {
-      throw new Error("Failed to parse PDF: " + e.message);
+      if (data.text && data.text.trim().length > 20) return data.text;
+    } catch (_) {
+      // fall through to lenient retry
     }
+
+    // Second attempt: lenient options (handles bad XRef tables, Canva PDFs, etc.)
+    try {
+      const data = await pdfParse(file.buffer, {
+        max: 0,               // no page cap
+        version: "v1.10.100" // use older, more permissive renderer
+      });
+      if (data.text && data.text.trim().length > 20) return data.text;
+    } catch (_) {
+      // fall through to final error
+    }
+
+    // Third attempt: raw text extraction fallback (grab readable ASCII from buffer)
+    try {
+      const raw = file.buffer.toString("latin1");
+      // Extract printable text blocks from the raw PDF stream
+      const matches = raw.match(/\(([^\)]{2,300})\)/g) || [];
+      const extracted = matches
+        .map(m => m.slice(1, -1).replace(/\\n/g, "\n").replace(/\\\\/g, "\\"))
+        .filter(t => /[a-zA-Z]{3,}/.test(t))
+        .join(" ")
+        .trim();
+      if (extracted.length > 100) return extracted;
+    } catch (_) {
+      // ignore
+    }
+
+    throw new Error(
+      "This PDF could not be parsed (it may be scanned, password-protected, or created by Canva/Adobe). " +
+      "Please export your resume as a .docx or .txt file and re-upload."
+    );
   }
   
   if (ext === ".docx" || ext === ".doc") {
