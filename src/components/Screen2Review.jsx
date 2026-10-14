@@ -8,16 +8,16 @@ import { apiAnalyze } from '../services/api';
 import { COMPANY_COLORS } from './SampleResumes';
 
 const FRESHER_ACTIVITIES = [
-  { label: 'Hackathon', icon: '🏆' },
-  { label: 'Coding Club', icon: '💻' },
-  { label: 'NSS/NCC', icon: '🎖️' },
-  { label: 'Sports Captain', icon: '⚽' },
-  { label: 'Cultural Event', icon: '🎭' },
-  { label: 'Research Paper', icon: '📝' },
-  { label: 'Open Source Contribution', icon: '🔓' },
-  { label: 'Freelance Project', icon: '💼' },
-  { label: 'Online Certification', icon: '🎓' },
-  { label: 'Teaching/Tutoring', icon: '📚' }
+  { label: 'Hackathon Project' },
+  { label: 'Coding Club Member' },
+  { label: 'Open Source Contribution' },
+  { label: 'Technical Research Paper' },
+  { label: 'Freelance Project' },
+  { label: 'Online Certification' },
+  { label: 'Competitive Programming' },
+  { label: 'Technical Workshop' },
+  { label: 'Leadership / Club Head' },
+  { label: 'Peer Mentoring' }
 ];
 
 const WEAK_VERBS = ['helped', 'assisted', 'worked on', 'was responsible for', 'involved in', 'contributed to', 'did', 'made', 'tried'];
@@ -600,7 +600,7 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
                         transition: 'all 0.15s', fontFamily: 'inherit'
                       }}
                     >
-                      {act.icon} {act.label}
+                      {act.label}
                     </button>
                   );
                 })}

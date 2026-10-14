@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Zap, Key, X, Eye, EyeOff } from 'lucide-react';
+import { Sparkles, Key, X, Eye, EyeOff, Check, ArrowRight } from 'lucide-react';
 
 export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepClick }) {
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [tempKey, setTempKey]   = useState(apiKey || '');
-  const [showKey, setShowKey]   = useState(false);
+  const [tempKey, setTempKey] = useState(apiKey || '');
+  const [showKey, setShowKey] = useState(false);
 
   const steps = [
     { num: 1, label: 'Input' },
     { num: 2, label: 'Review' },
-    { num: 3, label: 'Result' },
+    { num: 3, label: 'Tailored Resume' },
   ];
 
   function saveKey() {
@@ -24,92 +24,113 @@ export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepCl
 
   return (
     <>
-      {/* ── Nav bar ── */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(8, 10, 24, 0.88)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(37,42,74,0.9)',
-        padding: '0 24px',
+        background: 'rgba(9, 10, 15, 0.82)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 28px',
         height: 64,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        boxShadow: '0 1px 0 rgba(99,102,241,0.08), 0 4px 24px rgba(0,0,0,0.4)',
+        boxShadow: 'var(--inner-highlight)'
       }}>
-        {/* Logo */}
+        {/* Brand Logo */}
         <div
           onClick={handleLogoClick}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none' }}
           title="Return to Home / Start Over"
         >
           <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            width: 34, height: 34, borderRadius: 'var(--radius-sm)',
+            background: 'var(--bg-surface-elevated)',
+            border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(99,102,241,0.45)',
+            boxShadow: 'var(--inner-highlight)'
           }}>
-            <Zap size={18} color="white" />
+            <Sparkles size={16} color="#60a5fa" />
           </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em', color: '#F8FAFF' }}>
-              CareerLens <span className="gradient-text">AI</span>
-            </div>
-            <div style={{ fontSize: '0.65rem', color: '#8D96B3', marginTop: -2 }}>ATS Resume Builder</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
+              CareerLens
+            </span>
+            <span style={{
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              padding: '1px 6px',
+              borderRadius: 4,
+              background: 'rgba(59, 130, 246, 0.12)',
+              color: '#93c5fd',
+              border: '1px solid rgba(59, 130, 246, 0.25)',
+              letterSpacing: '0.04em'
+            }}>
+              AI
+            </span>
           </div>
         </div>
 
-        {/* Step Indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-          {steps.map((s, i) => (
-            <div key={s.num} style={{ display: 'flex', alignItems: 'center' }}>
-              <div
-                onClick={() => {
-                  if (step > s.num && onStepClick) onStepClick(s.num);
-                }}
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.78rem', fontWeight: 700,
-                  cursor: step > s.num ? 'pointer' : 'default',
-                  background: step === s.num
-                    ? 'linear-gradient(135deg,#6366f1,#8b5cf6)'
-                    : step > s.num ? '#34d399' : 'rgba(255,255,255,0.06)',
-                  border: step === s.num ? 'none' : step > s.num ? 'none' : '1px solid rgba(37,42,74,0.9)',
-                  boxShadow: step === s.num ? '0 0 18px rgba(99,102,241,0.55)' : 'none',
-                  color: step >= s.num ? 'white' : '#8D96B3',
-                  transition: 'all 0.3s ease',
-                  position: 'relative',
-                }}
-                title={step > s.num ? `Back to ${s.label}` : s.label}
-              >
-                {step > s.num ? '✓' : s.num}
-                {step === s.num && (
-                  <div style={{
-                    position: 'absolute', bottom: -20,
-                    fontSize: '0.63rem', fontWeight: 600,
-                    color: '#a5b4fc', whiteSpace: 'nowrap',
-                  }}>{s.label}</div>
+        {/* Step Progress Tracker */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {steps.map((s, i) => {
+            const isCurrent = step === s.num;
+            const isCompleted = step > s.num;
+            return (
+              <div key={s.num} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  onClick={() => isCompleted && onStepClick && onStepClick(s.num)}
+                  disabled={!isCompleted}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: isCurrent
+                      ? 'rgba(255, 255, 255, 0.08)'
+                      : isCompleted ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
+                    border: `1px solid ${isCurrent ? 'rgba(255, 255, 255, 0.2)' : isCompleted ? 'var(--border)' : 'transparent'}`,
+                    cursor: isCompleted ? 'pointer' : 'default',
+                    color: isCurrent ? '#ffffff' : isCompleted ? 'var(--text-secondary)' : 'var(--text-muted)',
+                    fontSize: '0.8rem',
+                    fontWeight: isCurrent ? 700 : 500,
+                    letterSpacing: '-0.01em',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                >
+                  <span style={{
+                    width: 18, height: 18, borderRadius: '50%',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.7rem', fontWeight: 700,
+                    background: isCompleted ? 'var(--emerald)' : isCurrent ? 'var(--accent)' : 'rgba(255,255,255,0.08)',
+                    color: isCompleted || isCurrent ? '#ffffff' : 'var(--text-muted)'
+                  }}>
+                    {isCompleted ? <Check size={11} strokeWidth={3} /> : s.num}
+                  </span>
+                  <span>{s.label}</span>
+                </button>
+
+                {i < steps.length - 1 && (
+                  <ArrowRight size={12} color="rgba(255, 255, 255, 0.2)" />
                 )}
               </div>
-
-              {i < steps.length - 1 && (
-                <div style={{
-                  width: 48, height: 2,
-                  background: step > s.num ? '#34d399' : 'rgba(37,42,74,0.9)',
-                  transition: 'background 0.3s ease',
-                }} />
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* API Key Button */}
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowKeyModal(true)} style={{ gap: 6 }}>
-          <Key size={14} />
-          {apiKey
-            ? <span style={{ color: '#34d399' }}>API Key ✓</span>
-            : <span style={{ color: '#B8C0D9' }}>API Key</span>}
+        {/* API Key Trigger */}
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowKeyModal(true)}
+          style={{ gap: 7 }}
+        >
+          <div style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: apiKey ? 'var(--emerald)' : 'var(--text-muted)'
+          }} />
+          <Key size={13} />
+          <span>{apiKey ? 'Custom Gemini Key' : 'Free Demo Key'}</span>
         </button>
       </nav>
 
@@ -118,8 +139,9 @@ export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepCl
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(0,0,0,0.75)',
-            backdropFilter: 'blur(8px)',
+            background: 'rgba(0, 0, 0, 0.72)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 24,
           }}
@@ -127,54 +149,67 @@ export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepCl
         >
           <div
             className="card"
-            style={{ width: '100%', maxWidth: 460, background: '#0D1025', border: '1px solid rgba(99,102,241,0.3)' }}
+            style={{ width: '100%', maxWidth: 460, background: 'var(--bg-surface)' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
               <div>
-                <h3 style={{ color: '#F8FAFF', marginBottom: 4 }}>Gemini API Key</h3>
-                <p style={{ fontSize: '0.8rem', color: '#8D96B3' }}>
-                  Required for real AI generation. Leave blank to use demo mode.
+                <h3 style={{ marginBottom: 4 }}>Gemini API Settings</h3>
+                <p style={{ fontSize: '0.84rem' }}>
+                  Provide your personal key for live Gemini 2.0 Flash generation, or use the built-in deterministic engine.
                 </p>
               </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowKeyModal(false)}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowKeyModal(false)}
+                style={{ padding: 4 }}
+              >
                 <X size={16} />
               </button>
             </div>
 
-            {/* Input */}
-            <div style={{ position: 'relative', marginBottom: 12 }}>
+            {/* Input field */}
+            <div style={{ position: 'relative', marginBottom: 14 }}>
               <input
                 className="input"
                 type={showKey ? 'text' : 'password'}
-                placeholder="AIza..."
+                placeholder="AIzaSy..."
                 value={tempKey}
                 onChange={e => setTempKey(e.target.value)}
-                style={{ paddingRight: 44 }}
+                style={{ paddingRight: 42, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.84rem' }}
               />
               <button
+                type="button"
                 onClick={() => setShowKey(!showKey)}
                 style={{
                   position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer', color: '#8D96B3',
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
                 }}
               >
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
 
-            {/* Info box */}
+            {/* Helper note */}
             <div style={{
-              background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.2)',
-              borderRadius: 8, padding: '10px 14px', marginBottom: 16,
-              fontSize: '0.8rem', color: '#a5f3fc',
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '11px 14px',
+              marginBottom: 20,
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)'
             }}>
-              💡 Get your free key at{' '}
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer"
-                style={{ color: '#22d3ee', textDecoration: 'underline' }}>
-                Google AI Studio
+              Free keys can be created in seconds at{' '}
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#60a5fa', textDecoration: 'none', fontWeight: 600 }}
+              >
+                Google AI Studio ↗
               </a>
-              . Use Gemini 2.0 Flash for best results.
+              . Without a key, all presets and ATS analysis run via the instant mock engine.
             </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -184,7 +219,9 @@ export default function Navbar({ step, apiKey, onApiKeyChange, onReset, onStepCl
               >
                 Clear
               </button>
-              <button className="btn btn-primary btn-sm" onClick={saveKey}>Save Key</button>
+              <button className="btn btn-primary btn-sm" onClick={saveKey}>
+                Save Key
+              </button>
             </div>
           </div>
         </div>

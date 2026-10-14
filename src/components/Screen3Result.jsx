@@ -40,7 +40,7 @@ function ScoreRing({ score, color, size = 100 }) {
         transform="rotate(-90 50 50)"
         style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)' }}
       />
-      <text x="50" y="56" textAnchor="middle" fill="white" fontSize="18" fontWeight="700" fontFamily="Inter">
+      <text x="50" y="56" textAnchor="middle" fill="white" fontSize="18" fontWeight="700" fontFamily="Plus Jakarta Sans, sans-serif">
         {score}%
       </text>
     </svg>
@@ -218,10 +218,10 @@ export default function Screen3Result({ data, onBack, apiKey }) {
       {/* ── Header ── */}
       <div style={{ marginBottom: 32 }}>
         <h2 style={{ marginBottom: 8 }}>
-          Your Resume is Ready <span style={{ fontSize: '1.4rem' }}>🎉</span>
+          Resume Optimization Complete
         </h2>
         <p style={{ color: 'var(--text-secondary)' }}>
-          ATS-optimized · Truth Lock verified · Tailored for {data.targetCompany?.toUpperCase()}
+          ATS-aligned · Truth Lock verified · Tailored for {data.targetCompany?.toUpperCase()}
         </p>
       </div>
 
@@ -230,30 +230,30 @@ export default function Screen3Result({ data, onBack, apiKey }) {
         {/* ATS Score Before */}
         <div className="card" style={{ textAlign: 'center', padding: '20px 16px' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-            Before
+            Baseline ATS Match
           </div>
-          <ScoreRing score={ats?.baseline || 0} color="#f43f5e" size={90} />
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>ATS Score</div>
+          <ScoreRing score={ats?.baseline || 0} color="#71717a" size={90} />
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>Initial Score</div>
         </div>
 
-        {/* Arrow */}
+        {/* Improvement Indicator */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ textAlign: 'center' }}>
-            <TrendingUp size={32} color="#10b981" style={{ marginBottom: 8 }} />
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>
-              +<AnimatedNumber from={0} to={(ats?.optimized || 0) - (ats?.baseline || 0)} />%
+            <TrendingUp size={28} color="#10b981" style={{ marginBottom: 6, display: 'inline-block' }} />
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981', letterSpacing: '-0.02em' }}>
+              +<AnimatedNumber from={0} to={Math.max(0, (ats?.optimized || 0) - (ats?.baseline || 0))} />%
             </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>improvement</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>match increase</div>
           </div>
         </div>
 
         {/* ATS Score After */}
-        <div className="card card-glow" style={{ textAlign: 'center', padding: '20px 16px' }}>
-          <div style={{ fontSize: '0.75rem', color: '#a5b4fc', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
-            After ✨
+        <div className="card" style={{ textAlign: 'center', padding: '20px 16px', borderColor: 'var(--border-focus)' }}>
+          <div style={{ fontSize: '0.75rem', color: '#93c5fd', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+            Tailored ATS Match
           </div>
-          <ScoreRing score={ats?.optimized || 0} color="#6366f1" size={90} />
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>ATS Score</div>
+          <ScoreRing score={ats?.optimized || 0} color="#3b82f6" size={90} />
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 8 }}>Optimized Score</div>
         </div>
 
         {/* Truth Lock */}

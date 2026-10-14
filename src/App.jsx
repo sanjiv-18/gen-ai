@@ -51,17 +51,14 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Animated background grid
-const BGGrid = () => (
+// Clean subtle ambient lighting
+const BGAmbient = () => (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
     backgroundImage: `
-      radial-gradient(ellipse at 20% 10%, rgba(99,102,241,0.12) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 90%, rgba(139,92,246,0.08) 0%, transparent 50%),
-      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)
-    `,
-    backgroundSize: '100% 100%, 100% 100%, 48px 48px, 48px 48px'
+      radial-gradient(ellipse 75% 35% at 50% -10%, rgba(59, 130, 246, 0.06), transparent 70%),
+      radial-gradient(ellipse 50% 30% at 85% 100%, rgba(59, 130, 246, 0.03), transparent 60%)
+    `
   }} />
 );
 
@@ -103,7 +100,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div style={{ minHeight: '100vh', background: 'var(--bg-base)', position: 'relative' }}>
-        <BGGrid />
+        <BGAmbient />
         <Navbar
           step={step}
           apiKey={apiKey}

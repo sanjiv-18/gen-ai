@@ -25,7 +25,7 @@ function EditableBullet({ text, bulletIndex, verified, revalidating, onEdit, edi
 
   return (
     <li style={{ marginBottom: 3, display: 'flex', gap: 6, alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
-      <span style={{ color: '#6366f1', flexShrink: 0, marginTop: 2, fontSize: '0.8em' }}>▸</span>
+      <span style={{ color: '#2563eb', flexShrink: 0, marginTop: 2, fontSize: '0.8em' }}>▸</span>
       <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
         {isEditing ? (
           <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
