@@ -295,7 +295,7 @@ export default function Screen1Input({ onNext, apiKey }) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.doc,.txt"
+                accept=".pdf,.docx"
                 style={{ display: 'none' }}
                 onChange={e => handleFile(e.target.files[0])}
               />
@@ -304,7 +304,7 @@ export default function Screen1Input({ onNext, apiKey }) {
                 Drag & drop your resume file here
               </p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Supports PDF, DOCX, and TXT files up to 10MB
+                Supports PDF and DOCX files up to 10MB
               </p>
             </div>
           ) : (

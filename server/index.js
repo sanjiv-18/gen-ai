@@ -29,20 +29,16 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
   fileFilter: (req, file, cb) => {
-    const allowed = [".pdf", ".docx", ".txt", ".doc"];
+    const allowed = [".pdf", ".docx"];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error("Only PDF, DOCX, and TXT files are allowed"));
+    else cb(new Error("Only PDF and DOCX files are allowed"));
   }
 });
 
 // ── Helper: Extract text from uploaded file ────────────────────────────────
 async function extractTextFromFile(file) {
   const ext = path.extname(file.originalname).toLowerCase();
-  
-  if (ext === ".txt") {
-    return file.buffer.toString("utf-8");
-  }
   
   if (ext === ".pdf") {
     const pdfParse = require("pdf-parse");
