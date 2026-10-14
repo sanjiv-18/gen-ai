@@ -114,6 +114,7 @@ export default function Screen1Input({ onNext, apiKey }) {
         file: file,
         targetCompany,
         targetRole,
+        jd,
         apiKey,
         demoMode: ''
       });

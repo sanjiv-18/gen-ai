@@ -1,19 +1,27 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const path = require("path");
 
 const { getCompanyProfile, MODES, detectMode } = require("./companyProfiles");
 const { verifyBullets, revalidateBullet, scoreKeywords, auditInput, resumeToPlainText } = require("./truthLock");
 const {
   initGemini,
   callUnderstand,
+  callPass1Extract,
+  callPass2TargetLens,
   callAnalyze,
   callBuild,
   mockUnderstand,
   mockAnalyze,
-  mockBuild
+  mockBuild,
+  mockTargetLens,
+  calculateCosineSimilarity,
+  sanitizeResumeText,
+  parseResumeText,
+  normalizeProfile
 } = require("./gemini");
 
 const app = express();
@@ -152,13 +160,55 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", version: "1.0.0", time: new Date().toISOString() });
 });
 
-// ── ENDPOINT 1: Understand ────────────────────────────────────────────────
+// ── DEDICATED PASS 1 ENDPOINT: Extract (Zero Company Bias) ────────────────
+// POST /api/extract
+// Body: { rawText?, apiKey? } OR multipart file
+app.post("/api/extract", upload.single("resume"), async (req, res) => {
+  try {
+    let rawText = req.body.rawText || "";
+    const { apiKey = "", demoMode } = req.body;
+
+    if (req.file) {
+      rawText = await extractTextFromFile(req.file);
+      if (!rawText || !rawText.trim()) {
+        return res.status(400).json({ error: "Could not extract text from uploaded file." });
+      }
+    }
+
+    if (!rawText.trim() && !demoMode) {
+      return res.status(400).json({ error: "No resume text or file provided" });
+    }
+
+    const sanitized = sanitizeResumeText(rawText);
+    const effectiveKey = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY || "";
+    let profile;
+
+    if (effectiveKey) {
+      initGemini(effectiveKey);
+      try {
+        profile = await callPass1Extract(sanitized);
+      } catch (err) {
+        console.warn("Pass 1 Gemini extract failed, using deterministic fallback:", err.message);
+        profile = parseResumeText(sanitized);
+      }
+    } else {
+      profile = parseResumeText(sanitized);
+    }
+
+    res.json({ profile, rawText: sanitized });
+  } catch (err) {
+    console.error("Extract error:", err);
+    res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+// ── TWO-PASS ENDPOINT: Understand ─────────────────────────────────────────
 // POST /api/understand
-// Body: { rawText?, targetCompany, targetRole, apiKey? } OR multipart file
+// Body: { rawText?, targetCompany, targetRole, jd?, apiKey? } OR multipart file
 app.post("/api/understand", upload.single("resume"), async (req, res) => {
   try {
     let rawText = req.body.rawText || "";
-    const { targetCompany = "other", targetRole = "", apiKey = "", demoMode } = req.body;
+    const { targetCompany = "other", targetRole = "", jd = "", apiKey = "", demoMode } = req.body;
 
     // Extract text from uploaded file
     if (req.file) {
@@ -174,30 +224,34 @@ app.post("/api/understand", upload.single("resume"), async (req, res) => {
       return res.status(400).json({ error: "No resume text or file provided" });
     }
 
+    // 1. Text Sanitization Layer (Pre-processing)
+    const sanitizedText = sanitizeResumeText(rawText);
+
     // Initialize Gemini if API key provided or set in env
     const effectiveKey = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY || "";
     let result;
     if (effectiveKey) {
       initGemini(effectiveKey);
       try {
-        result = await callUnderstand(rawText, targetCompany, targetRole);
+        // Runs Pass 1 (Entity Extraction) followed by Pass 2 (Target Lens & Gap Mapping)
+        result = await callUnderstand(sanitizedText, targetCompany, targetRole, jd);
       } catch (geminiErr) {
-        console.warn("Gemini call failed, using mock:", geminiErr.message);
-        result = mockUnderstand(rawText, targetCompany, demoMode || "auto");
+        console.warn("Gemini call failed, using deterministic fallback:", geminiErr.message);
+        result = mockUnderstand(sanitizedText, targetCompany, demoMode || "auto", targetRole, jd);
       }
     } else {
       // Fallback mock engine
-      result = mockUnderstand(rawText, targetCompany, demoMode || "auto");
+      result = mockUnderstand(sanitizedText, targetCompany, demoMode || "auto", targetRole, jd);
     }
 
     // Code-based audit supplement (deterministic)
-    if (rawText) {
-      const codeAudit = auditInput(rawText);
+    if (sanitizedText) {
+      const codeAudit = auditInput(sanitizedText);
       result.audit = [...new Set([...(result.audit || []), ...codeAudit])];
     }
 
-    // Attach rawText to response (needed for Truth Lock later)
-    result.rawText = rawText;
+    // Attach sanitizedText to response (needed for Truth Lock later)
+    result.rawText = sanitizedText;
 
     res.json(result);
   } catch (err) {
@@ -265,6 +319,18 @@ app.post("/api/analyze", async (req, res) => {
       tone: companyProfile.tone,
       templateStyle: companyProfile.templateStyle
     };
+
+    // ── DETERMINISTIC ML LAYER: Cosine Similarity ───────────────────────────
+    const companyStackAndKeywords = [
+      ...(companyProfile.stack || []),
+      ...(companyProfile.keywords || [])
+    ];
+    const candidateSkills = Array.isArray(profile.skills)
+      ? profile.skills
+      : (profile.skills && typeof profile.skills === "object")
+        ? Object.values(profile.skills).flat()
+        : [];
+    result.ml_match_score = calculateCosineSimilarity(candidateSkills, companyStackAndKeywords);
 
     res.json(result);
   } catch (err) {
@@ -334,10 +400,17 @@ app.post("/api/build", async (req, res) => {
     ].join(" ");
     const baselineScore = scoreKeywords(originalProfileText, keywords);
 
+    // ── DETERMINISTIC ML LAYER: Cosine Similarity ─────────────────────────
+    const targetKeywords = Array.isArray(keywords) && keywords.length > 0
+      ? keywords
+      : [...(companyProfile.stack || []), ...(companyProfile.keywords || [])];
+    const ml_match_score = calculateCosineSimilarity(skillsArr, targetKeywords);
+
     res.json({
       resume: llmResult.resume,
       changes_explained: llmResult.changes_explained || [],
       bullets: verifiedBullets,
+      ml_match_score,
       ats: {
         baseline: baselineScore.score,
         optimized: Math.max(baselineScore.score, optimizedScore.score),

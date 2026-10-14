@@ -14,16 +14,28 @@ async function handleResponse(res) {
   return data;
 }
 
-export async function apiUnderstand({ rawText = '', file = null, targetCompany, targetRole, apiKey = '', demoMode = '' }) {
+export async function apiUnderstand({ rawText = '', file = null, targetCompany, targetRole, jd = '', apiKey = '', demoMode = '' }) {
   const formData = new FormData();
   if (file) formData.append('resume', file);
   if (rawText) formData.append('rawText', rawText);
   formData.append('targetCompany', targetCompany || 'other');
   formData.append('targetRole', targetRole || '');
+  formData.append('jd', jd || '');
   formData.append('apiKey', apiKey || '');
   formData.append('demoMode', demoMode || '');
 
   const res = await fetch(`${BASE_URL}/understand`, { method: 'POST', body: formData });
+  return handleResponse(res);
+}
+
+export async function apiExtract({ rawText = '', file = null, apiKey = '', demoMode = '' }) {
+  const formData = new FormData();
+  if (file) formData.append('resume', file);
+  if (rawText) formData.append('rawText', rawText);
+  formData.append('apiKey', apiKey || '');
+  formData.append('demoMode', demoMode || '');
+
+  const res = await fetch(`${BASE_URL}/extract`, { method: 'POST', body: formData });
   return handleResponse(res);
 }
 

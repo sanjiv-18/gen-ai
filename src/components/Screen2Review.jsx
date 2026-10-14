@@ -169,7 +169,8 @@ export default function Screen2Review({ data, onNext, onBack, apiKey }) {
         gapAnswers,
         userAnswers: smartAnswers,
         companyProfile: analysisData?.company_profile,
-        rawText: data.rawText
+        rawText: data.rawText,
+        ml_match_score: analysisData?.ml_match_score ?? data.ml_match_score ?? 0
       });
     } catch (e) {
       setError(e.message);

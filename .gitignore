@@ -27,3 +27,12 @@ server/node_modules
 *.sln
 *.sw?
 .vercel
+
+# Scratch & Temporary Test Scripts
+scratch/
+
+# Large Media Files (exceeding Git 100MB limit)
+*.mp4
+*.mov
+*.avi
+*.mkv

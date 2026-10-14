@@ -1,5 +1,6 @@
-// Gemini AI Integration — 3 LLM Calls
+// Gemini AI Integration — Two-Pass Architecture + Resilient Model Fallbacks
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { PROFILE_JSON_SCHEMA, TARGET_LENS_JSON_SCHEMA, createEmptyProfile, normalizeProfile } = require("./schema");
 
 let genAI = null;
 
@@ -18,99 +19,430 @@ function cleanAndParseJSON(text) {
   if (start !== -1 && end !== -1 && end > start) {
     cleaned = cleaned.substring(start, end + 1);
   }
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    try {
+      // Fix common LLM JSON syntax issues: trailing commas before } or ], control characters
+      const fixed = cleaned
+        .replace(/,\s*([\]}])/g, '$1')
+        .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+      return JSON.parse(fixed);
+    } catch (err2) {
+      console.warn("Failed to parse JSON directly, returning empty object:", err.message);
+      return {};
+    }
+  }
 }
 
-function getModel(modelName = "gemini-1.5-flash") {
+// Resilient candidate models: gemini-3.5-flash-lite (primary), with fast fallbacks
+const CANDIDATE_MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-flash-latest"
+];
+
+function getModel(modelName = "gemini-3.5-flash-lite", customConfig = {}) {
   if (!genAI) throw new Error("NO_API_KEY");
   return genAI.getGenerativeModel({
     model: modelName,
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.3,
+      temperature: 0.1, // Low temperature for deterministic entity extraction
+      ...customConfig
     }
   });
 }
 
-// ── CALL 1: Understand ─────────────────────────────────────────────────────
-// Parses resume/text and drafts smart questions
-async function callUnderstand(rawText, targetCompany, targetRole) {
-  const model = getModel();
-  const prompt = `
-You are a senior technical recruiter and resume analyst. Parse this resume/profile text and extract structured data.
+async function generateJSONWithFallback(prompt, customConfig = {}) {
+  if (!genAI) throw new Error("NO_API_KEY");
+  let lastError = null;
 
-RAW INPUT:
-"""
-${rawText}
-"""
+  for (const modelName of CANDIDATE_MODELS) {
+    try {
+      const model = getModel(modelName, customConfig);
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return cleanAndParseJSON(text);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[Gemini] Model ${modelName} call failed (${err.message}). Trying fallback model...`);
+    }
+  }
 
-Target Company: ${targetCompany}
-Target Role: ${targetRole || "Software Engineer"}
-
-Return ONLY valid JSON matching this exact schema:
-{
-  "profile": {
-    "name": "string",
-    "email": "string",
-    "phone": "string",
-    "linkedin": "string",
-    "github": "string",
-    "location": "string",
-    "summary": "string",
-    "skills": ["string"],
-    "experience": [
-      {
-        "title": "string",
-        "company": "string",
-        "duration": "string",
-        "months": number,
-        "isInternship": boolean,
-        "bullets": ["string"]
-      }
-    ],
-    "education": [
-      {
-        "degree": "string",
-        "institution": "string",
-        "year": "string",
-        "gpa": "string",
-        "coursework": ["string"]
-      }
-    ],
-    "projects": [
-      {
-        "name": "string",
-        "description": "string",
-        "tech": ["string"],
-        "link": "string",
-        "bullets": ["string"]
-      }
-    ],
-    "certifications": ["string"],
-    "activities": ["string"],
-    "github_repos": ["string"]
-  },
-  "mode": "fresher OR experienced",
-  "audit": ["string — specific issues found in the resume"],
-  "questions": ["string — max 3 smart questions to gather missing data"]
+  throw lastError || new Error("All Gemini candidate models failed.");
 }
 
-Mode detection rules:
-- "fresher" if experience array is empty OR all entries are internships < 3 months
-- "experienced" if ANY non-internship role OR internship >= 3 months exists
+// ── PRE-PROCESSING & TEXT SANITIZATION LAYER ─────────────────────────────────
+/**
+ * Sanitizes raw text extracted from PDF/DOCX:
+ * - Normalizes Unicode whitespace, zero-width chars, quotes, and ligatures
+ * - Strips PDF page headers, footers, timestamps, and page numbers
+ * - Filters out lonely symbol lines and conversational/prompt-leak artifacts
+ * - Normalizes excessive consecutive newlines
+ */
+function sanitizeResumeText(rawText) {
+  if (!rawText || typeof rawText !== "string") return "";
 
-PROJECT EXTRACTION RULES:
-- Extract projects as single objects. Do not split bullet points into separate project names.
-- The 'Project Name' must be the overarching title.
-- 'Tech Stack' (tech) must be an array of technologies used. Ignore raw bullet descriptions in this array.
+  // 1. Unicode normalization (NFKC normalizes ligatures like fi, fl and compatibility forms)
+  let text = rawText.normalize("NFKC");
 
-Audit rules: flag weak verbs, missing metrics, thin sections, generic descriptions.
-Questions: ask only about missing quantifiable data or key projects. Max 3 questions.
+  // 2. Normalize whitespace, smart dashes, and quotes
+  text = text
+    .replace(/[\u00A0\u202F\u1680\u2000-\u200A]/g, " ")
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+    .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/[\u2022\u2023\u25E6\u25AA\u25CF\u2219]/g, "• ");
+
+  // 3. Remove non-printable control characters except newline and tab
+  text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+  const lines = text.split(/\r?\n/);
+  const cleanedLines = [];
+
+  const HEADER_FOOTER_REGEX = /^(page\s+\d+(\s+of\s+\d+)?|\d+\s+of\s+\d+|\[\s*page\s+\d+\s*\]|curriculum\s+vitae|confidential|downloaded\s+from\b.*|https?:\/\/.*\/resume.*)[\.\:\-]?$/i;
+  const CONVERSATIONAL_ARTIFACT_REGEX = /^(every\s+one\s+of\s+these\s+gives\s+them\s+a\s+question|please\s+refer\s+to|click\s+here\s+to|instructions?:|evaluation\s+criteria:?|note\s+that:?)[\.\!\?]?$/i;
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      cleanedLines.push("");
+      continue;
+    }
+
+    // Strip standalone isolated symbol lines (e.g. "•", "-", "---", "|", "...")
+    if (/^[•\-\*\.\|\_\~\:\;\#\=]{1,5}$/.test(trimmed)) {
+      continue;
+    }
+
+    // Strip page numbers & header/footer artifacts
+    if (HEADER_FOOTER_REGEX.test(trimmed)) {
+      continue;
+    }
+
+    // Strip conversational / prompt-bleed artifacts
+    if (CONVERSATIONAL_ARTIFACT_REGEX.test(trimmed)) {
+      continue;
+    }
+
+    // Normalize multiple inline spaces to a single space
+    const normalizedLine = trimmed.replace(/[ \t]{2,}/g, " ");
+    cleanedLines.push(normalizedLine);
+  }
+
+  // Collapse excessive empty lines (max 2 consecutive newlines)
+  return cleanedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// ── PASS 1: DETERMINISTIC RESUME EXTRACTION ────────────────────────────────
+/**
+ * Pure Resume Extraction — ZERO target company awareness!
+ * Grounding invariants:
+ * - Verbatim numeric extraction: CGPA 7.11 stays 7.11. Never converted to 6.5 or 4.0 scale.
+ * - Missing sections default to empty array []. Never injects placeholder companies.
+ * - Discards conversational sentences from project names.
+ */
+async function callPass1Extract(sanitizedText) {
+  const prompt = `
+You are a deterministic, zero-hallucination Resume Entity Extraction Engine.
+Your sole responsibility is to convert the raw parsed resume text into a strictly normalized JSON representation of facts EXPLICITLY PRESENT in the text.
+
+CRITICAL GROUNDING RULES:
+1. STRICT VERBATIM EXTRACTION:
+   - Extract values verbatim as they appear in the source text.
+   - Do NOT infer, normalize, round, recalculate, convert, or estimate numeric fields like CGPA, GPA, percentages, graduation years, or dates.
+   - If the source states "CGPA: 7.11" or "7.11/10", the gpa field MUST be exactly "7.11" (or "7.11/10"). NEVER normalize 7.11 to 6.5, 3.5, or a 4.0 scale.
+   - If GPA or CGPA is not stated in the text, return "".
+
+2. ZERO FABRICATION OF NON-EXISTENT SECTIONS:
+   - If a standard section (e.g., Work Experience, Internships, Certifications, Extracurricular Activities) is NOT explicitly present in the document, return an empty array [].
+   - NEVER invent placeholder companies, dummy roles, or mock objects like "Company", "Present", "Software Engineer", or "engineering Experience: Company".
+   - If the candidate is a student or fresher with no employment history, "experience" MUST be [].
+
+3. STRICT PROJECT VERIFICATION & ARTIFACT FILTERING:
+   - A project entry MUST be an actual technical software/hardware engineering project with a verified project title and related technical description or bullet points.
+   - DISCARD floating sentences, reviewer guidelines, conversational artifacts, or random PDF debris (e.g., "Every one of these gives them a question.") that do not describe technical project work. NEVER create phantom projects from stray sentences.
+   - If no genuine technical projects are present, "projects" MUST be [].
+
+4. STRICT SKILL ISOLATION (ZERO KEYWORD BLEED):
+   - Extract ONLY technical skills and tools that are explicitly stated in the resume text.
+   - Do NOT assume, infer, or inject skills that are not in the text.
+
+5. ISOLATION FROM TARGET COMPANY:
+   - Do NOT optimize or tailor for any company at this stage. Extract ONLY what the candidate has written.
+
+POSITIVE EXAMPLE:
+Input:
+"Rahul Sharma
+rahul.sharma@gmail.com | +91-9876543210 | Bangalore
+github.com/rahul | linkedin.com/in/rahul
+EDUCATION: B.Tech in Computer Science, ABC University, 2024. CGPA: 7.11
+SKILLS: Python, React, JavaScript, PostgreSQL, OpenCV
+PROJECTS:
+Smart Vision Guard
+• Built real-time edge detection system using Python and OpenCV.
+• Processed 30 FPS video streams."
+
+Output:
+{
+  "name": "Rahul Sharma",
+  "email": "rahul.sharma@gmail.com",
+  "phone": "+91-9876543210",
+  "linkedin": "linkedin.com/in/rahul",
+  "github": "github.com/rahul",
+  "location": "Bangalore",
+  "summary": "",
+  "skills": ["Python", "React", "JavaScript", "PostgreSQL", "OpenCV"],
+  "experience": [],
+  "education": [
+    {
+      "degree": "B.Tech in Computer Science",
+      "institution": "ABC University",
+      "year": "2024",
+      "gpa": "7.11",
+      "coursework": []
+    }
+  ],
+  "projects": [
+    {
+      "name": "Smart Vision Guard",
+      "description": "Real-time edge detection system using Python and OpenCV",
+      "tech": ["Python", "OpenCV"],
+      "link": "",
+      "bullets": [
+        "Built real-time edge detection system using Python and OpenCV.",
+        "Processed 30 FPS video streams."
+      ]
+    }
+  ],
+  "certifications": [],
+  "activities": [],
+  "github_repos": ["smart-vision-guard"]
+}
+
+NEGATIVE CONSTRAINTS TO ENFORCE:
+- WRONG: "experience": [{"title": "Software Engineer", "company": "Company", ...}] -> NEVER do this! Return []!
+- WRONG: "gpa": "6.5/10" when text says 7.11 -> NEVER do this! Return "7.11"!
+- WRONG: "projects": [{"name": "Every one of", ...}] -> NEVER parse conversational artifacts as projects! Discard them!
+
+RAW RESUME TEXT:
+"""
+${sanitizedText}
+"""
+
+Return ONLY valid JSON matching this schema:
+{
+  "name": "string",
+  "email": "string",
+  "phone": "string",
+  "linkedin": "string",
+  "github": "string",
+  "location": "string",
+  "summary": "string",
+  "skills": ["string"],
+  "experience": [
+    {
+      "title": "string",
+      "company": "string",
+      "duration": "string",
+      "months": 0,
+      "isInternship": false,
+      "bullets": ["string"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "string",
+      "institution": "string",
+      "year": "string",
+      "gpa": "string",
+      "coursework": ["string"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "string",
+      "description": "string",
+      "tech": ["string"],
+      "link": "string",
+      "bullets": ["string"]
+    }
+  ],
+  "certifications": ["string"],
+  "activities": ["string"],
+  "github_repos": ["string"]
+}
 `;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
-  return cleanAndParseJSON(text);
+  const parsed = await generateJSONWithFallback(prompt, {
+    responseSchema: PROFILE_JSON_SCHEMA
+  });
+
+  return normalizeProfile(parsed, sanitizedText);
+}
+
+// ── DETERMINISTIC ML LAYER: Cosine Similarity (Vector Space Model) ─────────
+/**
+ * Calculates mathematical match score between extracted skills and target keywords
+ * using standard Vector Space Model with Cosine Similarity.
+ * Returns percentage (0 - 100) rounded to 1 decimal place.
+ */
+function calculateCosineSimilarity(resumeSkills = [], targetJDSkills = []) {
+  // Normalize skills for case-insensitive matching
+  const cleanA = (resumeSkills || []).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  const cleanB = (targetJDSkills || []).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+  const vocabulary = Array.from(new Set([...cleanA, ...cleanB]));
+  if (vocabulary.length === 0) return 0;
+
+  const buildVector = (skills) => vocabulary.map(term => skills.includes(term) ? 1 : 0);
+  const vectorA = buildVector(cleanA);
+  const vectorB = buildVector(cleanB);
+  let dotProduct = 0;
+  for (let i = 0; i < vocabulary.length; i++) {
+    dotProduct += vectorA[i] * vectorB[i];
+  }
+  const magnitudeA = Math.sqrt(vectorA.reduce((sum, val) => sum + val * val, 0));
+  const magnitudeB = Math.sqrt(vectorB.reduce((sum, val) => sum + val * val, 0));
+  if (magnitudeA === 0 || magnitudeB === 0) return 0;
+  return parseFloat(((dotProduct / (magnitudeA * magnitudeB)) * 100).toFixed(1));
+}
+
+// ── PASS 2: TARGET LENS & GAP MAPPING ──────────────────────────────────────
+/**
+ * Takes the clean grounded profile from Pass 1 and applies the Target Company Lens:
+ * - Detects mode (fresher vs experienced) based on actual verified experience
+ * - Identifies skill gaps without polluting the candidate's extracted profile
+ * - Formulates max 3 smart questions to gather missing quantifiable metrics
+ * - Produces company tone tips and maps matched projects
+ * - Computes deterministic ml_match_score via Vector Space Cosine Similarity
+ */
+async function callPass2TargetLens(profile, companyProfile, targetRole, jd) {
+  const isFresher = (profile.experience || []).length === 0 ||
+    profile.experience.every(e => e.isInternship || (e.months && e.months < 3) || /intern\b/i.test(e.title || ""));
+  const mode = isFresher ? "fresher" : "experienced";
+
+  const prompt = `
+You are an ATS optimization expert and technical recruiter evaluating a candidate for ${companyProfile.name}.
+Your task is to analyze the candidate's VERIFIED profile against ${companyProfile.name}'s standards and target role requirements.
+
+TARGET COMPANY PROFILE:
+- Company: ${companyProfile.name}
+- Type: ${companyProfile.type}
+- Hiring Style: ${companyProfile.hiringStyle}
+- Preferred Tech Stack: ${JSON.stringify(companyProfile.stack)}
+- Key Values: ${JSON.stringify(companyProfile.coreValues)}
+- Tone / Culture: ${companyProfile.tone}
+- Words to Avoid: ${JSON.stringify(companyProfile.avoidWords || [])}
+
+TARGET ROLE: ${targetRole || "Software Engineer"}
+
+JOB DESCRIPTION (if provided):
+"""
+${jd || "No JD provided — evaluate against company profile defaults"}
+"""
+
+VERIFIED CANDIDATE PROFILE (Extracted in Pass 1):
+- Candidate Name: ${profile.name}
+- Extracted Skills: ${JSON.stringify(profile.skills || [])}
+- Work Experience: ${JSON.stringify(profile.experience || [])}
+- Education: ${JSON.stringify(profile.education || [])}
+- Projects: ${JSON.stringify((profile.projects || []).map(p => ({ name: p.name, tech: p.tech, bullets: p.bullets })))}
+
+DETECTED HIRING MODE: ${mode}
+
+RULES:
+1. GAP MAP: Compare candidate's extracted skills against ${companyProfile.name}'s stack (${JSON.stringify(companyProfile.stack)}) and JD.
+   - "strong": Candidate explicitly demonstrates depth with this skill.
+   - "weak": Candidate lists it or touches it briefly without deep metrics.
+   - "missing": Required by company or JD but absent from candidate's profile. Suggest one concrete, actionable project idea for each missing item.
+2. AUDIT: Flag 3-5 specific, actionable weaknesses in the candidate's existing bullets (e.g. weak verbs like 'worked on' or 'helped', missing impact metrics, lack of scale).
+3. SMART QUESTIONS: Ask at most 3 focused questions to gather missing quantifiable numbers (e.g. users, requests/sec, latency reduction) from their existing projects.
+4. KEYWORDS: Return top 20 ATS keywords for this company and role.
+5. MATCHED PROJECTS: Select which of the candidate's actual projects best match ${companyProfile.name}'s stack. Never invent new project names.
+
+Return ONLY valid JSON matching this schema:
+{
+  "mode": "${mode}",
+  "audit": ["string"],
+  "questions": ["string"],
+  "gap_map": [
+    {
+      "skill": "string",
+      "status": "strong | weak | missing",
+      "suggestion": "string"
+    }
+  ],
+  "keywords": ["string"],
+  "company_tone_tips": ["string"],
+  "matched_projects": [
+    {
+      "name": "string",
+      "description": "string",
+      "tech": ["string"],
+      "relevance": "string"
+    }
+  ]
+}
+`;
+
+  const result = await generateJSONWithFallback(prompt, {
+    responseSchema: TARGET_LENS_JSON_SCHEMA
+  });
+
+  // ── DETERMINISTIC ML LAYER: Cosine Similarity ───────────────────────────
+  // Compare candidate's extracted skills against target company stack & keywords
+  const targetKeywords = [
+    ...(companyProfile?.stack || []),
+    ...(companyProfile?.keywords || []),
+    ...(Array.isArray(result.keywords) ? result.keywords : [])
+  ];
+  const ml_match_score = calculateCosineSimilarity(profile.skills || [], targetKeywords);
+
+  return {
+    mode: result.mode || mode,
+    ml_match_score,
+    audit: Array.isArray(result.audit) ? result.audit : [],
+    questions: Array.isArray(result.questions) ? result.questions.slice(0, 3) : [],
+    gap_map: Array.isArray(result.gap_map) ? result.gap_map : [],
+    keywords: Array.isArray(result.keywords) ? result.keywords : companyProfile.keywords || [],
+    company_tone_tips: Array.isArray(result.company_tone_tips) ? result.company_tone_tips : [companyProfile.tone],
+    matched_projects: Array.isArray(result.matched_projects) ? result.matched_projects : []
+  };
+}
+
+// ── TWO-PASS COORDINATOR: callUnderstand ────────────────────────────────────
+/**
+ * Orchestrates Pass 1 (Deterministic Extraction) followed by Pass 2 (Target Lens & Gap Mapping).
+ * Keeps profile extraction completely isolated from company keyword bleed.
+ */
+async function callUnderstand(rawText, targetCompany, targetRole, jd = "", companyProfile = null) {
+  const sanitized = sanitizeResumeText(rawText);
+
+  // Pass 1: Extract clean, grounded profile with zero company bias
+  const profile = await callPass1Extract(sanitized);
+
+  // Load company profile if not passed
+  const { getCompanyProfile } = require("./companyProfiles");
+  const compProf = companyProfile || getCompanyProfile(targetCompany);
+
+  // Pass 2: Apply Target Lens & Gap Mapping to the clean profile
+  const lens = await callPass2TargetLens(profile, compProf, targetRole, jd);
+
+  return {
+    profile,
+    ml_match_score: lens.ml_match_score ?? 0,
+    mode: lens.mode,
+    audit: lens.audit,
+    questions: lens.questions,
+    gap_map: lens.gap_map,
+    keywords: lens.keywords,
+    company_tone_tips: lens.company_tone_tips,
+    matched_projects: lens.matched_projects,
+    rawText: sanitized
+  };
 }
 
 // ── CALL 2: Analyze ────────────────────────────────────────────────────────
@@ -295,6 +627,32 @@ The bullets[] array MUST include every single bullet point from the resume with 
   return cleanAndParseJSON(text);
 }
 
+function isConversationalArtifact(line) {
+  if (!line || typeof line !== "string") return true;
+  const trimmed = line.trim().toLowerCase();
+  if (/^(every\s+one\s+of|this\s+is|please\s+refer|click\s+here|note\s+that|instructions?:|evaluation|give\s+them|gives\s+them|feedback)/i.test(trimmed)) {
+    return true;
+  }
+  // Conversational sentence with ending punctuation and length
+  if (/[.!?]$/.test(trimmed) && trimmed.split(/\s+/).length > 5) {
+    return true;
+  }
+  return false;
+}
+
+function extractVerbatimGpa(text) {
+  if (!text || typeof text !== "string") return "";
+  // 1. Explicit CGPA / GPA / Percentage prefix: e.g. "CGPA: 7.11", "CGPA: 7.11/10", "GPA: 3.8", "Percentage: 85%"
+  const match1 = text.match(/\b(?:cgpa|gpa|grade|score|percentage)[:\s]*([0-9]+(?:\.[0-9]+)?(?:\s*\/\s*[0-9]+(?:\.[0-9]+)?)?%?)/i);
+  if (match1 && match1[1]) return match1[1].trim();
+
+  // 2. Trailing CGPA / GPA e.g. "7.11/10 CGPA" or "7.11 CGPA"
+  const match2 = text.match(/([0-9]+\.[0-9]+(?:\s*\/\s*10)?)\s*(?:cgpa|gpa)/i);
+  if (match2 && match2[1]) return match2[1].trim();
+
+  return "";
+}
+
 function cleanRepoOrProjectName(str) {
   if (!str || typeof str !== 'string') return "Software Project";
   let s = str.trim();
@@ -318,11 +676,6 @@ function cleanRepoOrProjectName(str) {
   // Remove non-alphanumeric boundary chars
   s = s.replace(/^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$/g, '').trim();
 
-  const words = s.split(/\s+/).filter(Boolean);
-  if (words.length > 4) {
-    s = words.slice(0, 3).join(" ");
-  }
-
   return s || "Software Project";
 }
 
@@ -338,20 +691,29 @@ function safeMatchKeyword(text, keyword) {
   }
 }
 
+/**
+ * Deterministic Fallback Resume Parser:
+ * Strictly grounded.
+ * - Extracts verbatim CGPA/GPA (e.g. 7.11)
+ * - Returns empty array [] if no work experience exists (NO dummy placeholder companies)
+ * - Returns empty array [] if no verified projects exist (NO dummy placeholder projects)
+ * - Discards conversational lines from project names
+ */
 function parseResumeText(rawText) {
   if (!rawText || typeof rawText !== 'string') return null;
-  const rawLines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  const sanitized = sanitizeResumeText(rawText);
+  const rawLines = sanitized.split('\n').map(l => l.trim()).filter(Boolean);
   if (rawLines.length === 0) return null;
 
   // 1. Header & Contacts
   const name = rawLines[0].replace(/^(curriculum vitae|resume|cv)/i, '').trim() || "Candidate Name";
-  const emailMatch = rawText.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
+  const emailMatch = sanitized.match(/[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/);
   const email = emailMatch ? emailMatch[0] : "";
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,12}/);
+  const phoneMatch = sanitized.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{10,12}/);
   const phone = phoneMatch ? phoneMatch[0] : "";
-  const linkedinMatch = rawText.match(/(?:linkedin\.com\/in\/[\w-]+|[a-zA-Z0-9-]+\.linkedin\.com)/i);
+  const linkedinMatch = sanitized.match(/(?:linkedin\.com\/in\/[\w-]+|[a-zA-Z0-9-]+\.linkedin\.com)/i);
   const linkedin = linkedinMatch ? linkedinMatch[0] : "";
-  const githubMatch = rawText.match(/(?:github\.com\/[\w-]+)/i);
+  const githubMatch = sanitized.match(/(?:github\.com\/[\w-]+)/i);
   const github = githubMatch ? githubMatch[0] : "";
 
   // 2. Comprehensive Tech Keywords List (100+ items)
@@ -370,7 +732,7 @@ function parseResumeText(rawText) {
 
   const foundSkillsSet = new Set();
   TECH_KEYWORDS.forEach(tech => {
-    if (safeMatchKeyword(rawText, tech)) {
+    if (safeMatchKeyword(sanitized, tech)) {
       foundSkillsSet.add(tech);
     }
   });
@@ -433,33 +795,34 @@ function parseResumeText(rawText) {
   // Summary
   const summaryText = sections.summary
     .filter(l => !l.includes(email) && !l.includes(name))
-    .join(" ").trim() || "Software developer with technical experience.";
+    .join(" ").trim();
 
   // Experience
   const expItems = [];
   let currentExp = null;
 
-  const expSource = sections.experience.length > 0
-    ? sections.experience
-    : rawLines.filter(l => !l.includes('@') && /engineer|developer|intern|analyst|manager|consultant|associate|lead/i.test(l));
-
-  expSource.forEach(line => {
-    const isHeader = /engineer|developer|intern|analyst|manager|consultant|associate|lead|at\s+[A-Z]|(?:20\d\d|19\d\d)/i.test(line) && !line.startsWith('-') && !line.startsWith('•') && !line.startsWith('*');
-    if (isHeader) {
-      if (currentExp) expItems.push(currentExp);
-      const parts = line.split(/\sat\s|\s-\s|\s\|\s/i);
-      currentExp = {
-        title: parts[0]?.trim() || line,
-        company: parts[1]?.trim() || "Company",
-        duration: line.match(/(?:20\d\d|19\d\d|\bPresent\b|\bCurrent\b).*/i)?.[0] || "Present",
-        bullets: []
-      };
-    } else if (currentExp) {
-      const cleanBullet = line.replace(/^[•\-\*]\s*/, '').trim();
-      if (cleanBullet) currentExp.bullets.push(cleanBullet);
-    }
-  });
-  if (currentExp) expItems.push(currentExp);
+  // Only parse experience if sections.experience has explicit items
+  if (sections.experience.length > 0) {
+    sections.experience.forEach(line => {
+      const isHeader = /engineer|developer|intern|analyst|manager|consultant|associate|lead|at\s+[A-Z]|(?:20\d\d|19\d\d)/i.test(line) && !line.startsWith('-') && !line.startsWith('•') && !line.startsWith('*');
+      if (isHeader) {
+        if (currentExp && (currentExp.title || currentExp.company)) expItems.push(currentExp);
+        const parts = line.split(/\sat\s|\s-\s|\s\|\s/i);
+        const companyPart = parts[1]?.trim();
+        currentExp = {
+          title: parts[0]?.trim() || line,
+          company: companyPart || "",
+          duration: line.match(/(?:20\d\d|19\d\d|\bPresent\b|\bCurrent\b).*/i)?.[0] || "",
+          isInternship: /intern\b/i.test(line),
+          bullets: []
+        };
+      } else if (currentExp) {
+        const cleanBullet = line.replace(/^[•\-\*]\s*/, '').trim();
+        if (cleanBullet) currentExp.bullets.push(cleanBullet);
+      }
+    });
+    if (currentExp && (currentExp.title || currentExp.company)) expItems.push(currentExp);
+  }
 
   // Projects
   const projItems = [];
@@ -467,7 +830,9 @@ function parseResumeText(rawText) {
 
   const ACTION_VERBS_REGEX = /^(built|developed|created|implemented|designed|used|managed|led|added|worked|integrated|engineered|crafted|wrote|spearheaded|architected|configured|automated|deployed|optimized|maintained|analyzed|refactored|established)\b/i;
 
-  sections.projects.forEach(line => {
+  const projectLines = sections.projects.length > 0 ? sections.projects : [];
+
+  projectLines.forEach(line => {
     const cleanLine = line.trim();
     if (!cleanLine || /^projects|^personal\s+projects|^academic\s+projects/i.test(cleanLine)) return;
 
@@ -475,7 +840,12 @@ function parseResumeText(rawText) {
     const isProjHeader = !isBulletLine && cleanLine.length < 80;
 
     if (isProjHeader) {
-      if (currentProj) projItems.push(currentProj);
+      // Discard conversational artifacts or stray sentences from becoming project headers
+      if (isConversationalArtifact(cleanLine)) return;
+
+      if (currentProj && currentProj.name && currentProj.bullets.length > 0) {
+        projItems.push(currentProj);
+      }
 
       const title = cleanRepoOrProjectName(cleanLine);
       const projTech = Array.from(foundSkillsSet).filter(tech =>
@@ -485,7 +855,7 @@ function parseResumeText(rawText) {
       currentProj = {
         name: title,
         description: cleanLine,
-        tech: projTech.length > 0 ? projTech : Array.from(foundSkillsSet).slice(0, 4),
+        tech: projTech,
         link: cleanLine.match(/github\.com\/[\w-]+|https?:\/\/[\w.-]+/i)?.[0] || "",
         bullets: []
       };
@@ -502,26 +872,41 @@ function parseResumeText(rawText) {
     }
   });
 
-  if (currentProj) projItems.push(currentProj);
+  if (currentProj && currentProj.name && currentProj.bullets.length > 0) {
+    projItems.push(currentProj);
+  }
 
   // Education
   const eduItems = [];
   const eduSource = sections.education.length > 0
     ? sections.education
-    : rawLines.filter(l => /b\.tech|b\.e|b\.s|m\.tech|m\.s|bachelor|master|degree|university|college|institute|gpa/i.test(l));
+    : rawLines.filter(l => /b\.tech|b\.e|b\.s|m\.tech|m\.s|bachelor|master|degree|university|college|institute|cgpa|gpa/i.test(l));
+
+  const allEduText = sections.education.length > 0 ? sections.education.join(" ") : sanitized;
+  const detectedGpa = extractVerbatimGpa(allEduText);
 
   eduSource.forEach(line => {
-    if (/b\.tech|b\.e|b\.s|m\.tech|m\.s|bachelor|master|degree|diploma|phd|high school/i.test(line) || eduItems.length === 0) {
+    if (/b\.tech|b\.e|b\.s|m\.tech|m\.s|bachelor|master|degree|diploma|phd|high school/i.test(line)) {
+      const lineGpa = extractVerbatimGpa(line) || detectedGpa;
       eduItems.push({
-        degree: line,
-        institution: line.includes("at") ? line.split("at")[1].trim() : "University",
+        degree: line.split(/[,|–-]/)[0]?.trim() || line,
+        institution: line.includes("at") ? line.split("at")[1].trim() : (line.includes(",") ? line.split(",")[1]?.trim() : "University"),
         year: line.match(/20\d\d|19\d\d/)?.[0] || "2024",
-        gpa: line.match(/gpa:?\s*[\d.]+/i)?.[0] || ""
+        gpa: lineGpa
       });
     }
   });
 
-  return {
+  if (eduItems.length === 0 && detectedGpa) {
+    eduItems.push({
+      degree: "Bachelor of Technology",
+      institution: "University",
+      year: "2024",
+      gpa: detectedGpa
+    });
+  }
+
+  return normalizeProfile({
     name,
     email,
     phone,
@@ -530,53 +915,105 @@ function parseResumeText(rawText) {
     location: "",
     summary: summaryText,
     skills: Array.from(foundSkillsSet),
-    experience: expItems.length > 0 ? expItems : [{
-      title: "Software Engineer",
-      company: "Company",
-      duration: "Present",
-      bullets: rawLines.filter(l => /^[•\-\*]/.test(l)).map(l => l.replace(/^[•\-\*]\s*/, '')).slice(0, 4)
-    }],
-    education: eduItems.length > 0 ? eduItems : [{
-      degree: "Bachelor of Technology",
-      institution: "University",
-      year: "2024",
-      gpa: ""
-    }],
-    projects: projItems.length > 0 ? projItems : [{
-      name: "Software Application",
-      description: "Built software application",
-      tech: Array.from(foundSkillsSet).slice(0, 4),
-      link: "",
-      bullets: rawLines.filter(l => /^[•\-\*]/.test(l)).map(l => l.replace(/^[•\-\*]\s*/, '')).slice(0, 3)
-    }],
+    experience: expItems, // Guaranteed: EMPTY ARRAY for students/freshers!
+    education: eduItems,
+    projects: projItems, // Guaranteed: EMPTY ARRAY if no genuine projects!
     certifications: sections.certifications.map(l => l.replace(/^[•\-\*]\s*/, '')),
     activities: sections.activities.map(l => l.replace(/^[•\-\*]\s*/, '')),
     github_repos: projItems.map(p => p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+  });
+}
+
+/**
+ * Deterministic Mock Target Lens (Pass 2 fallback)
+ */
+function mockTargetLens(profile, companyProfile, targetRole = "Software Engineer", jd = "") {
+  const isFresher = (profile.experience || []).length === 0 ||
+    profile.experience.every(e => e.isInternship || (e.months && e.months < 3) || /intern\b/i.test(e.title || ""));
+  const mode = isFresher ? "fresher" : "experienced";
+
+  const companyStack = (companyProfile?.stack || ["Java", "Python", "React", "Node.js"]).map(s => String(s));
+  const candidateSkills = (profile.skills || []).map(s => s.toLowerCase());
+
+  const gap_map = companyStack.map(skill => {
+    const hasSkill = candidateSkills.some(cs => cs.includes(skill.toLowerCase()) || skill.toLowerCase().includes(cs));
+    return {
+      skill,
+      status: hasSkill ? "strong" : "missing",
+      suggestion: hasSkill
+        ? `Highlight deep architectural usage of ${skill} in your project bullet points.`
+        : `Build a focused demo or microservice demonstrating production ${skill} patterns.`
+    };
+  });
+
+  const audit = [];
+  if (profile.projects.length === 0) {
+    audit.push("No verified technical projects found — add at least 1-2 production-grade applications.");
+  } else {
+    audit.push("Strengthen action verbs across project bullets with measurable metrics and scale.");
+  }
+  if (!profile.summary) {
+    audit.push(`Add a concise professional summary tailored to ${companyProfile?.name || 'target company'}'s hiring culture.`);
+  }
+
+  const primaryProj = profile.projects[0]?.name || "primary project";
+  const questions = [
+    `What quantifiable metric (e.g. latency, users, data records) can you specify for ${primaryProj}?`,
+    `What specific testing, CI/CD, or deployment tools did you utilize?`,
+    `What was your single greatest technical challenge and how did you resolve it?`
+  ];
+
+  const targetKeywords = [
+    ...(companyProfile?.stack || []),
+    ...(companyProfile?.keywords || [])
+  ];
+  const ml_match_score = calculateCosineSimilarity(profile.skills || [], targetKeywords);
+
+  return {
+    mode,
+    ml_match_score,
+    audit,
+    questions,
+    gap_map: gap_map.slice(0, 12),
+    keywords: companyProfile?.keywords || ["scalable", "performance", "architecture", "APIs"],
+    company_tone_tips: [
+      companyProfile?.tone || "Professional and impact-oriented",
+      `Emphasize: ${(companyProfile?.emphasis || ["practical problem solving"]).join(", ")}`,
+      `Avoid: ${(companyProfile?.avoidWords || ["unverified claims"]).join(", ")}`
+    ],
+    matched_projects: (profile.projects || []).slice(0, 3).map(p => ({
+      name: p.name,
+      description: p.description || "",
+      tech: p.tech || [],
+      relevance: `Aligns with ${companyProfile?.name || 'target company'} standards`
+    }))
   };
 }
 
 // ── MOCK FALLBACK ENGINE ───────────────────────────────────────────────────
 // Used when no API key is provided or as fallback — returns parsed user data or realistic demo data
 
-function mockUnderstand(rawText, targetCompany, mode) {
+function mockUnderstand(rawText, targetCompany, mode, targetRole = "", jd = "") {
+  const { getCompanyProfile } = require("./companyProfiles");
+  const compProf = getCompanyProfile(targetCompany);
+
   // If user provided raw text and didn't request a fixed demo preset, parse their actual resume!
   if (rawText && rawText.trim() && mode !== "fresher" && mode !== "experienced") {
-    const parsed = parseResumeText(rawText);
+    const sanitized = sanitizeResumeText(rawText);
+    const parsed = parseResumeText(sanitized);
     if (parsed) {
-      const isFresher = (parsed.experience || []).length === 0;
+      const lens = mockTargetLens(parsed, compProf, targetRole, jd);
       return {
         profile: parsed,
-        mode: isFresher ? "fresher" : "experienced",
-        audit: [
-          "Action verbs need strengthening — add metrics to bullet points",
-          "Ensure top technical skills are highlighted near the top",
-          "Tailor your summary to match the target company's hiring priorities"
-        ],
-        questions: [
-          "What quantifiable metrics or numbers can you add to your main projects/roles?",
-          "What key tools or frameworks did you use in your most recent project?",
-          "What specific impact or business result did your work achieve?"
-        ]
+        ml_match_score: lens.ml_match_score ?? 0,
+        mode: lens.mode,
+        audit: lens.audit,
+        questions: lens.questions,
+        gap_map: lens.gap_map,
+        keywords: lens.keywords,
+        company_tone_tips: lens.company_tone_tips,
+        matched_projects: lens.matched_projects,
+        rawText: sanitized
       };
     }
   }
@@ -584,90 +1021,98 @@ function mockUnderstand(rawText, targetCompany, mode) {
   const isFresher = mode === "fresher" || (rawText || "").toLowerCase().includes("student") || (rawText || "").toLowerCase().includes("fresher");
   
   if (isFresher) {
+    const demoProfile = normalizeProfile({
+      name: "Priya Sharma",
+      email: "priya.sharma@gmail.com",
+      phone: "+91-9876543210",
+      linkedin: "linkedin.com/in/priyasharma",
+      github: "github.com/priyasharma",
+      location: "Chennai, Tamil Nadu",
+      summary: "Computer Science graduate with focus on full-stack web applications and systems engineering.",
+      skills: ["Python", "Java", "HTML", "CSS", "JavaScript", "MySQL", "Git", "Flask"],
+      experience: [], // Guaranteed: empty array for fresher demo!
+      education: [{
+        degree: "B.Tech Computer Science Engineering",
+        institution: "SRM Institute of Science and Technology",
+        year: "2024",
+        gpa: "8.2/10",
+        coursework: ["Data Structures", "Algorithms", "DBMS", "Operating Systems"]
+      }],
+      projects: [{
+        name: "Library Management System",
+        description: "Built a CRUD web application for managing library books using Python Flask and MySQL",
+        tech: ["Python", "Flask", "MySQL", "HTML", "CSS"],
+        link: "github.com/priyasharma/library-mgmt",
+        bullets: [
+          "Built backend with Flask handling 200+ book records",
+          "Designed MySQL schema with 5 normalized tables",
+          "Implemented search and filter queries optimizing response times"
+        ]
+      }],
+      certifications: ["Python for Everybody — Coursera"],
+      activities: ["Coding Club Member", "College Hackathon Participant"],
+      github_repos: ["library-mgmt", "portfolio-website"]
+    });
+
+    const lens = mockTargetLens(demoProfile, compProf, targetRole, jd);
     return {
-      profile: {
-        name: "Priya Sharma",
-        email: "priya.sharma@gmail.com",
-        phone: "+91-9876543210",
-        linkedin: "linkedin.com/in/priyasharma",
-        github: "github.com/priyasharma",
-        location: "Chennai, Tamil Nadu",
-        summary: "Computer Science student with interest in web development and software engineering.",
-        skills: ["Python", "Java", "HTML", "CSS", "JavaScript", "MySQL", "Git"],
-        experience: [],
-        education: [{
-          degree: "B.Tech Computer Science",
-          institution: "SRM Institute of Science and Technology",
-          year: "2024",
-          gpa: "8.2/10",
-          coursework: ["Data Structures", "Algorithms", "DBMS", "Operating Systems"]
-        }],
-        projects: [{
-          name: "Library Management System",
-          description: "Built a CRUD web application for managing library books using Python and MySQL",
-          tech: ["Python", "Flask", "MySQL", "HTML", "CSS"],
-          link: "github.com/priyasharma/library-mgmt",
-          bullets: ["Built backend with Flask handling 200+ book records", "Designed MySQL schema with 5 normalized tables"]
-        }],
-        certifications: ["Python for Everybody — Coursera"],
-        activities: ["Coding Club Member", "Participated in college hackathon"],
-        github_repos: ["library-mgmt", "portfolio-website", "todo-app"]
-      },
+      profile: demoProfile,
+      ml_match_score: lens.ml_match_score ?? 0,
       mode: "fresher",
-      audit: [
-        "Action verbs are weak — 'built' and 'designed' are fine but add impact numbers",
-        "Missing metrics: How many users used your library system? Time saved?",
-        "Projects section is thin — add 1-2 more substantial projects",
-        "Summary is too generic — tailor it to Zoho's product-builder culture"
-      ],
-      questions: [
-        "How many total users/records does your Library Management System handle?",
-        "Did you deploy any project live? If yes, what was the traffic/usage?",
-        "Have you participated in any hackathons or coding competitions? What was the result?"
-      ]
+      audit: lens.audit,
+      questions: lens.questions,
+      gap_map: lens.gap_map,
+      keywords: lens.keywords,
+      company_tone_tips: lens.company_tone_tips,
+      matched_projects: lens.matched_projects,
+      rawText: rawText || ""
     };
   } else {
+    const expProfile = {
+      name: "Arjun Mehta",
+      email: "arjun.mehta@gmail.com",
+      phone: "+91-9123456789",
+      linkedin: "linkedin.com/in/arjunmehta",
+      github: "github.com/arjunmehta",
+      location: "Bengaluru, Karnataka",
+      summary: "Software developer with 2 years of experience building scalable web applications.",
+      skills: ["JavaScript", "React", "Node.js", "Python", "AWS", "PostgreSQL", "Docker", "TypeScript"],
+      experience: [{
+        title: "Software Development Engineer",
+        company: "TechStartup Pvt Ltd",
+        duration: "June 2022 - Present",
+        months: 24,
+        isInternship: false,
+        bullets: [
+          "Worked on the backend API for the product",
+          "Helped fix bugs in the frontend React codebase",
+          "Was responsible for database optimization tasks",
+          "Assisted in migrating to AWS"
+        ]
+      }],
+      education: [{
+        degree: "B.Tech Computer Science",
+        institution: "NIT Trichy",
+        year: "2022",
+        gpa: "8.5/10",
+        coursework: []
+      }],
+      projects: [{
+        name: "E-commerce Platform",
+        description: "Built a full-stack e-commerce platform with React and Node.js",
+        tech: ["React", "Node.js", "PostgreSQL", "AWS S3", "Stripe"],
+        link: "github.com/arjunmehta/ecommerce",
+        bullets: ["Handles 1000 monthly active users", "Integrated Stripe payment processing"]
+      }],
+      certifications: ["AWS Solutions Architect Associate"],
+      activities: [],
+      github_repos: ["ecommerce-platform", "react-dashboard", "api-gateway"]
+    };
+
+    const lens = mockTargetLens(expProfile, compProf, targetRole, jd);
     return {
-      profile: {
-        name: "Arjun Mehta",
-        email: "arjun.mehta@gmail.com",
-        phone: "+91-9123456789",
-        linkedin: "linkedin.com/in/arjunmehta",
-        github: "github.com/arjunmehta",
-        location: "Bengaluru, Karnataka",
-        summary: "Software developer with 2 years of experience building scalable web applications.",
-        skills: ["JavaScript", "React", "Node.js", "Python", "AWS", "PostgreSQL", "Docker", "TypeScript"],
-        experience: [{
-          title: "Software Development Engineer",
-          company: "TechStartup Pvt Ltd",
-          duration: "June 2022 - Present",
-          months: 24,
-          isInternship: false,
-          bullets: [
-            "Worked on the backend API for the product",
-            "Helped fix bugs in the frontend React codebase",
-            "Was responsible for database optimization tasks",
-            "Assisted in migrating to AWS"
-          ]
-        }],
-        education: [{
-          degree: "B.Tech Computer Science",
-          institution: "NIT Trichy",
-          year: "2022",
-          gpa: "8.5/10",
-          coursework: []
-        }],
-        projects: [{
-          name: "E-commerce Platform",
-          description: "Built a full-stack e-commerce platform with React and Node.js",
-          tech: ["React", "Node.js", "PostgreSQL", "AWS S3", "Stripe"],
-          link: "github.com/arjunmehta/ecommerce",
-          bullets: ["Handles 1000 monthly active users", "Integrated Stripe payment processing"]
-        }],
-        certifications: ["AWS Solutions Architect Associate"],
-        activities: [],
-        github_repos: ["ecommerce-platform", "react-dashboard", "api-gateway"]
-      },
+      profile: expProfile,
+      ml_match_score: lens.ml_match_score ?? 0,
       mode: "experienced",
       audit: [
         "Critical: All 4 experience bullets use weak verbs ('worked on', 'helped', 'was responsible for', 'assisted') — Amazon will reject these immediately",
@@ -679,7 +1124,12 @@ function mockUnderstand(rawText, targetCompany, mode) {
         "What was the exact impact of your database optimization? (e.g., query time reduced from X ms to Y ms, or cost reduced by $Z/month)",
         "What was the scale of the AWS migration? (services migrated, users affected, uptime improvement)",
         "For your e-commerce platform, what was peak traffic and what business metrics improved after launch?"
-      ]
+      ],
+      gap_map: lens.gap_map,
+      keywords: lens.keywords,
+      company_tone_tips: lens.company_tone_tips,
+      matched_projects: lens.matched_projects,
+      rawText: rawText || ""
     };
   }
 }
@@ -864,9 +1314,16 @@ function mockBuild(profile, companyProfile, mode, modeConfig, keywords) {
 module.exports = {
   initGemini,
   callUnderstand,
+  callPass1Extract,
+  callPass2TargetLens,
   callAnalyze,
   callBuild,
   mockUnderstand,
   mockAnalyze,
-  mockBuild
+  mockBuild,
+  mockTargetLens,
+  calculateCosineSimilarity,
+  sanitizeResumeText,
+  parseResumeText,
+  normalizeProfile
 };

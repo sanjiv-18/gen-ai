@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, Download, Code2, CheckCircle2, AlertTriangle,
   ChevronDown, ChevronUp, TrendingUp, RefreshCw,
-  Info, Sparkles, Award, Edit3
+  Info, Sparkles, Award, Edit3, Cpu
 } from 'lucide-react';
 import { apiBuild, apiRevalidate } from '../services/api';
 import ResumeTemplate from './ResumeTemplate';
@@ -44,6 +44,173 @@ function ScoreRing({ score, color, size = 100 }) {
         {score}%
       </text>
     </svg>
+  );
+}
+
+// ── DETERMINISTIC ML MATCH SCORE: Config & Visual Components ───────────────
+function getMLScoreConfig(rawScore) {
+  const score = typeof rawScore === 'number' ? rawScore : parseFloat(rawScore) || 0;
+  if (score >= 75) {
+    return {
+      color: '#10b981', // Green for >75%
+      badgeBg: 'rgba(16, 185, 129, 0.12)',
+      badgeBorder: 'rgba(16, 185, 129, 0.35)',
+      badgeColor: '#6ee7b7',
+      glow: 'rgba(16, 185, 129, 0.25)',
+      label: 'High Mathematical Alignment',
+      tag: 'Strong Vector Overlap',
+      verdict: 'Extracted candidate skills closely map to the target role requirements in n-dimensional vector space.'
+    };
+  }
+  if (score >= 50) {
+    return {
+      color: '#f59e0b', // Yellow for 50-75%
+      badgeBg: 'rgba(245, 158, 11, 0.12)',
+      badgeBorder: 'rgba(245, 158, 11, 0.35)',
+      badgeColor: '#fcd34d',
+      glow: 'rgba(245, 158, 11, 0.25)',
+      label: 'Moderate Mathematical Match',
+      tag: 'Partial Vector Overlap',
+      verdict: 'Candidate skills share core vocabulary with job description; targeted bridges applied to fill stack gaps.'
+    };
+  }
+  return {
+    color: '#f43f5e', // Red for <50%
+    badgeBg: 'rgba(244, 63, 94, 0.12)',
+    badgeBorder: 'rgba(244, 63, 94, 0.35)',
+    badgeColor: '#fda4af',
+    glow: 'rgba(244, 63, 94, 0.25)',
+    label: 'Skill Gap Detected',
+    tag: 'Low Vector Overlap',
+    verdict: 'Noticeable divergence between extracted skills and target requirements; extensive keyword adaptation required.'
+  };
+}
+
+// Glowing Circular Progress Indicator
+function MLCircularProgress({ score, color, size = 100 }) {
+  const numericScore = typeof score === 'number' ? score : parseFloat(score) || 0;
+  const r = 38;
+  const c = 2 * Math.PI * r;
+  const dash = (Math.min(100, Math.max(0, numericScore)) / 100) * c;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+        <circle
+          cx="50" cy="50" r={r} fill="none"
+          stroke={color} strokeWidth="8"
+          strokeDasharray={`${dash} ${c}`}
+          strokeLinecap="round"
+          transform="rotate(-90 50 50)"
+          style={{
+            transition: 'stroke-dasharray 1.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            filter: `drop-shadow(0 0 8px ${color}70)`
+          }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        userSelect: 'none'
+      }}>
+        <div style={{
+          fontSize: '1.45rem', fontWeight: 800, color: '#fff',
+          letterSpacing: '-0.03em', lineHeight: 1, fontFamily: 'Plus Jakarta Sans, sans-serif'
+        }}>
+          {numericScore}%
+        </div>
+        <div style={{ fontSize: '0.6rem', color: color, fontWeight: 700, textTransform: 'uppercase', marginTop: 3, letterSpacing: '0.05em' }}>
+          Cosine
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Sleek ML Match Score Component Card
+function MLMatchScoreCard({ score, targetCompany, targetRole }) {
+  const numericScore = typeof score === 'number' ? score : parseFloat(score) || 0;
+  const cfg = getMLScoreConfig(numericScore);
+
+  return (
+    <div className="card anim-fade" style={{
+      marginBottom: 24,
+      padding: '20px 24px',
+      background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
+      border: `1px solid ${cfg.color}45`,
+      borderRadius: 'var(--radius-lg, 16px)',
+      boxShadow: `0 10px 30px -10px ${cfg.glow}, 0 0 0 1px ${cfg.color}15 inset`,
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        position: 'absolute', top: 0, left: '15%', right: '15%', height: '2px',
+        background: `linear-gradient(90deg, transparent, ${cfg.color}, transparent)`
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, minWidth: 280 }}>
+          <MLCircularProgress score={numericScore} color={cfg.color} size={100} />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '3px 10px', borderRadius: 'var(--radius-full, 9999px)',
+                background: cfg.badgeBg, border: `1px solid ${cfg.badgeBorder}`,
+                color: cfg.badgeColor, fontSize: '0.72rem', fontWeight: 700,
+                letterSpacing: '0.04em', textTransform: 'uppercase'
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, display: 'inline-block' }} />
+                {cfg.label}
+              </span>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: '0.7rem', color: 'var(--text-muted, #94a3b8)',
+                background: 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: 'var(--radius-sm, 6px)',
+                border: '1px solid rgba(255,255,255,0.08)'
+              }}>
+                <Cpu size={12} color="#a5b4fc" /> Vector Space Model
+              </span>
+            </div>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 4px', color: '#fff', letterSpacing: '-0.02em' }}>
+              ML Match Score: <span style={{ color: cfg.color }}>{numericScore}%</span>
+            </h3>
+
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary, #94a3b8)', maxWidth: 520, lineHeight: 1.5 }}>
+              {cfg.verdict}
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          display: 'flex', gap: 16,
+          padding: '10px 16px', borderRadius: 'var(--radius-md, 10px)',
+          background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)'
+        }}>
+          <div style={{ textAlign: 'center', padding: '0 8px' }}>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+              Layer
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0' }}>Cosine Similarity</div>
+            <div style={{ fontSize: '0.68rem', color: cfg.color, marginTop: 2 }}>Dot Product / ||A||·||B||</div>
+          </div>
+          <div style={{ width: 1, background: 'rgba(255,255,255,0.08)' }} />
+          <div style={{ textAlign: 'center', padding: '0 8px' }}>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+              Target Lens
+            </div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0' }}>
+              {(targetCompany || 'Target').toUpperCase()}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted, #94a3b8)', marginTop: 2 }}>
+              {targetRole || 'Software Engineer'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -208,6 +375,7 @@ export default function Screen3Result({ data, onBack, apiKey }) {
   }
 
   const { resume, changes_explained, ats, sectionOrder, plainText } = buildData || {};
+  const mlScore = buildData?.ml_match_score ?? data?.ml_match_score ?? 0;
   const verifiedCount = bullets.filter(b => b.verified).length;
   const unverifiedCount = bullets.length - verifiedCount;
   const changes = changes_explained || [];
@@ -216,7 +384,7 @@ export default function Screen3Result({ data, onBack, apiKey }) {
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 24px' }} className="anim-fade">
       {/* ── Header ── */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 20 }}>
         <h2 style={{ marginBottom: 8 }}>
           Resume Optimization Complete
         </h2>
@@ -224,6 +392,13 @@ export default function Screen3Result({ data, onBack, apiKey }) {
           ATS-aligned · Truth Lock verified · Tailored for {data.targetCompany?.toUpperCase()}
         </p>
       </div>
+
+      {/* ── Sleek ML Match Score (Cosine Similarity Vector Space Model) ── */}
+      <MLMatchScoreCard
+        score={mlScore}
+        targetCompany={data.targetCompany}
+        targetRole={data.targetRole}
+      />
 
       {/* ── Scorecard Row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
